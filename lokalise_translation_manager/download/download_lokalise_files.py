@@ -80,16 +80,18 @@ def main():
     project_id = config["lokalise"]["project_id"]
     api_key = config["lokalise"]["api_key"]
 
-    ios_dir = fetch_lokalise_file(project_id, api_key, "iOS", "strings", "lokalise_files/ios")
-    android_dir = fetch_lokalise_file(project_id, api_key, "Android", "xml", "lokalise_files/android")
+    ios_dir = fetch_lokalise_file(project_id, api_key, "iOS", "strings", "lokalise_translation_manager/lokalise_files/ios")
+    android_dir = fetch_lokalise_file(project_id, api_key, "Android", "xml", "lokalise_translation_manager/lokalise_files/android")
 
-    config["project_paths"]["ios"] = ios_dir
-    config["project_paths"]["android"] = android_dir
+    config["lokalise_paths"] = {
+        "ios": ios_dir,
+        "android": android_dir
+    }
 
     with CONFIG_PATH.open('w') as f:
         json.dump(config, f, indent=4)
 
-    print(f"\n{Fore.GREEN if use_colors else ''}All files downloaded and paths updated in config successfully.")
+    print(f"\n{Fore.GREEN if use_colors else ''}All files downloaded and Lokalise paths added to config successfully.")
 
 if __name__ == "__main__":
     main()
