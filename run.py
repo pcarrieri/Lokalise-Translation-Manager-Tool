@@ -6,10 +6,9 @@ import sys
 import json
 from pathlib import Path
 
-# 🔧 Aggiungi la root del progetto al sys.path
+# Add project root to sys.path
 ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR))
-
 
 # Standard libraries (for user info)
 standard_libraries = [
@@ -105,7 +104,16 @@ def main():
 
     get_user_config()
 
-    # Call the iOS and Android scanners as modules
+    # STEP 1: Download and extract Lokalise files before scanning
+    try:
+        from lokalise_translation_manager.download.download_lokalise_files import main as fetch_lokalise_files
+        print("\n--- Downloading Lokalise Files ---\n")
+        fetch_lokalise_files()
+    except Exception as e:
+        print(f"\nError while downloading Lokalise files: {e}")
+        return
+
+    # STEP 2: Call the iOS and Android scanners as modules
     try:
         from lokalise_translation_manager.scanner.ios_scanner import main as run_ios_scanner
         from lokalise_translation_manager.scanner.android_scanner import main as run_android_scanner
