@@ -97,14 +97,14 @@ def main():
 
     get_user_config()
 
-    # Call main logic from core package
+    # Call the iOS scanner as a module
     try:
-        from lokalise_translation_manager.core import run_main
-        run_main()
+        from lokalise_translation_manager.scanner.ios_scanner import main as run_ios_scanner
+        run_ios_scanner()
     except ImportError as e:
-        print(f"Error importing main module: {e}")
+        print(f"Error importing ios_scanner module: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred during iOS scan: {e}")
 
 if __name__ == "__main__":
     main()
