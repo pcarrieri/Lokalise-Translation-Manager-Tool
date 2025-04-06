@@ -1,0 +1,4 @@
+prettytable
+colorama
+tqdm
+requests
