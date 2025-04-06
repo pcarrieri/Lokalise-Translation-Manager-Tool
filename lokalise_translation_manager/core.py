@@ -39,6 +39,11 @@ def run_tool():
         keys_module = importlib.import_module("lokalise_translation_manager.utils.download_lokalise_keys")
         keys_module.main()
 
+        # Step 5: Normalize and prepare data for translation
+        print_colored("\nNormalizing data for translation...", Fore.CYAN)
+        normalize_module = importlib.import_module("lokalise_translation_manager.utils.normalize_translations")
+        normalize_module.process_normalization()
+
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
     except ModuleNotFoundError as e:
