@@ -1,4 +1,4 @@
-# run.py - Entry point for Lokalise Translation Manager Tool (hybrid version)
+# run.py - Entry point for Lokalise Translation Manager Tool (hybrid version with stdlib awareness)
 
 import os
 import subprocess
@@ -6,7 +6,13 @@ import sys
 import json
 from pathlib import Path
 
-# Optional external libraries
+# Standard libraries (for user info)
+standard_libraries = [
+    'os', 're', 'csv', 'time', 'threading', 'subprocess',
+    'json', 'configparser', 'itertools'
+]
+
+# Optional external libraries to install if not present
 optional_libraries = [
     'prettytable',
     'colorama',
@@ -32,6 +38,15 @@ def install_from_requirements():
     else:
         print("requirements.txt not found. Falling back to manual installation.")
     return False
+
+def check_standard_libraries():
+    print("\nChecking standard Python libraries...")
+    for lib in standard_libraries:
+        try:
+            __import__(lib)
+            print(f"{lib} is available (standard library).")
+        except ImportError:
+            print(f"{lib} is missing. Please ensure your Python installation is complete.")
 
 def check_and_install_optional_libraries():
     print("\nChecking and installing optional libraries...")
@@ -66,13 +81,16 @@ def get_user_config():
 
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=4)
-        print(f"Configuration saved to {config_file}.\n")
+        print(f"Configuration saved to {config_file}.")
     else:
-        print(f"Configuration already exists at {config_file}.\n")
+        print(f"Configuration already exists at {config_file}.")
 
 def main():
     print("\nWelcome to Lokalise Translation Manager Tool 🚀\n")
 
+    print("Tip: You can also manually run \"pip install -r requirements.txt\" to install all dependencies.\n")
+
+    check_standard_libraries()
     used_requirements = install_from_requirements()
     if not used_requirements:
         check_and_install_optional_libraries()
