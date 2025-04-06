@@ -18,7 +18,7 @@ try:
 except ImportError:
     table_enabled = False
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjusted to go up to root project directory
 REPORTS_DIR = BASE_DIR / "reports"
 IOS_CSV = REPORTS_DIR / "ios" / "missing_ios_translations.csv"
 ANDROID_CSV = REPORTS_DIR / "android" / "missing_android_translations.csv"
