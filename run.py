@@ -94,7 +94,6 @@ def get_user_config():
 
 def main():
     print("\nWelcome to Lokalise Translation Manager Tool 🚀\n")
-
     print("Tip: You can also manually run \"pip install -r requirements.txt\" to install all dependencies.\n")
 
     check_standard_libraries()
@@ -104,30 +103,12 @@ def main():
 
     get_user_config()
 
-    # STEP 1: Download and extract Lokalise files before scanning
+    # STEP: Call core flow logic
     try:
-        from lokalise_translation_manager.download.download_lokalise_files import main as fetch_lokalise_files
-        print("\n--- Downloading Lokalise Files ---\n")
-        fetch_lokalise_files()
+        from lokalise_translation_manager.core import run_tool
+        run_tool()
     except Exception as e:
-        print(f"\nError while downloading Lokalise files: {e}")
-        return
-
-    # STEP 2: Call the iOS and Android scanners as modules
-    try:
-        from lokalise_translation_manager.scanner.ios_scanner import main as run_ios_scanner
-        from lokalise_translation_manager.scanner.android_scanner import main as run_android_scanner
-
-        print("\n--- Running iOS Scanner ---\n")
-        run_ios_scanner()
-
-        print("\n--- Running Android Scanner ---\n")
-        run_android_scanner()
-
-    except ImportError as e:
-        print(f"Error importing scanner modules: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred during scanning: {e}")
+        print(f"\nError during tool execution: {e}")
 
 if __name__ == "__main__":
     main()
