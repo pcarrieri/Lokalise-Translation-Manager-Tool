@@ -1,12 +1,7 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Logo" width="180"/>
+  <img src="assets/logo.png" alt="Lokalise Translation Manager Tool Logo" width="200"/>
 </p>
 
-<h1 align="center">🌍 Lokalise Translation Manager Tool</h1>
-
-<p align="center">
-  Automate, translate, and manage localization from CLI – powered by Lokalise & GPT
-</p>
 
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/downloads/)
