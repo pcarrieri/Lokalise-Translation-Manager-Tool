@@ -45,15 +45,33 @@ It automatically installs all dependencies and optional libraries (like `prettyt
 
 
 2. **Run the Tool**:
+
+**🛠 Option 1: Standard installation with pip (recommended)**
+
+If you are using a virtual environment or want full control:
+
+   ```bash
+   pip install -r requirements.txt
+   python3 run.py
+
+This will install all required dependencies listed in `requirements.txt`.
+
+**🚀 Option 2: Direct script execution (zero setup)**
+
+If you don’t want to worry about manually installing anything:
    
    ```bash
    python3 run.py
    
 This will:
 
-- Install dependencies
-- Collect required input if not already configured
-- Start the analysis and translation process
+- Check your Python standard libraries
+- Automatically attempt to install missing optional libraries (like tqdm, requests, etc.)
+- Prompt you for initial configuration on first run
+
+**📁 Configuration will be saved to** `config/user_config.json` after the first execution.
+
+Both options are fully supported — use what fits best for your workflow.
 
 ---
 
