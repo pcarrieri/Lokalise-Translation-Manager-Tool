@@ -1,206 +1,172 @@
-# utils/download_lokalise_keys.py - Scan iOS project and compare with Lokalise strings
+# utils/download_lokalise_keys.py - Download Lokalise keys and merge with missing translations
 
 import os
-import re
+import json
+import requests
 import csv
 import time
-import threading
-import json
+import sys
 from pathlib import Path
-import configparser
 
 try:
-    from colorama import Fore, Style, init
+    from colorama import init, Fore, Style
     init(autoreset=True)
-    color_enabled = True
+    use_colors = True
 except ImportError:
-    color_enabled = False
+    use_colors = False
 
-try:
-    from prettytable import PrettyTable
-    table_enabled = True
-except ImportError:
-    table_enabled = False
+# Constants and paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_PATH = BASE_DIR.parent / "config" / "user_config.json"
+REPORTS_DIR = BASE_DIR.parent / "reports"
+EN_TRANSLATIONS_FILE = REPORTS_DIR / "en_translations.csv"
+CSV_FILE = REPORTS_DIR / "lokalise_keys.csv"
+MISSING_TRANSLATIONS_FILE = REPORTS_DIR / "missing_translations.csv"
+MERGED_RESULT_FILE = REPORTS_DIR / "merged_result.csv"
+REQUESTS_PER_SECOND = 6
 
-# Define paths
-BASE_DIR = Path(__file__).resolve().parent.parent  # utils is inside lokalise_translation_manager
-CONFIG_PATH = BASE_DIR / "config" / "user_config.json"
-EXCLUDED_LOCALES_PATH = BASE_DIR / "config" / "excluded_locales.ini"
-REPORTS_DIR = BASE_DIR.parent / "reports" / "ios"
-FINAL_RESULT_CSV = REPORTS_DIR / "final_result_ios.csv"
-TOTAL_KEYS_CSV = REPORTS_DIR / "total_keys_used_ios.csv"
-SWIFT_FILES_CSV = REPORTS_DIR / "swift_files.csv"
-MISSING_TRANSLATIONS_CSV = REPORTS_DIR / "missing_ios_translations.csv"
+def print_colored(text, color=None):
+    if use_colors and color:
+        print(color + text + Style.RESET_ALL)
+    else:
+        print(text)
 
-def print_colored(text, color):
-    print(color + text if color_enabled else text)
-
-def spinner():
-    while not stop_loading:
-        for cursor in '|/-\\':
-            print('\r' + cursor + ' Loading...', end='', flush=True)
-            time.sleep(0.1)
-
-def extract_localized_strings(directory):
-    localized_strings = set()
-    file_analysis = {}
-    pattern = re.compile(r'NSLocalizedString\("([^"]+)",\s*comment\s*:\s*"[^"]*"\)')
-
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.endswith('.swift'):
-                file_path = os.path.join(root, file)
-                relative_path = os.path.relpath(file_path, directory)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        matches = pattern.findall(content)
-                        localized_strings.update(matches)
-                        file_analysis[relative_path] = len(matches)
-                except Exception as e:
-                    print_colored(f"Error reading {file_path}: {e}", Fore.RED)
-
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
+def load_config():
     try:
-        with FINAL_RESULT_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            for string in sorted(localized_strings):
-                writer.writerow([string])
-        print_colored("\nResults have been written to final_result_ios.csv", Fore.CYAN)
+        if CONFIG_PATH.exists():
+            with CONFIG_PATH.open('r') as config_file:
+                config_data = json.load(config_file)
+                return config_data['lokalise']['project_id'], config_data['lokalise']['api_key']
+        else:
+            raise FileNotFoundError("No user_config.json found.")
     except Exception as e:
-        print_colored(f"Error writing to final_result_ios.csv: {e}", Fore.RED)
+        print_colored(f"ERROR: Failed to load configuration - {e}", Fore.RED)
+        return None, None
 
+def fetch_translations(project_id, api_key):
+    all_translations = []
+    page = 1
     try:
-        with TOTAL_KEYS_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            for string in sorted(localized_strings):
-                writer.writerow([string])
-        print_colored("\nTotal keys have been written to total_keys_used_ios.csv", Fore.CYAN)
-    except Exception as e:
-        print_colored(f"Error writing to total_keys_used_ios.csv: {e}", Fore.RED)
+        while True:
+            url = f"https://api.lokalise.com/api2/projects/{project_id}/translations?limit=500&page={page}"
+            headers = {"accept": "application/json", "X-Api-Token": api_key}
+            sys.stdout.write(f"\rFetching translations page {page}...")
+            sys.stdout.flush()
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            translations = response.json().get('translations', [])
+            if not translations:
+                break
+            all_translations.extend(translations)
+            page += 1
+            time.sleep(1 / REQUESTS_PER_SECOND)
+        sys.stdout.write("\n")
+    except requests.exceptions.RequestException as e:
+        print_colored(f"\nERROR: Failed to fetch translations - {e}", Fore.RED)
+    return all_translations
 
+def save_translations(translations):
     try:
-        with SWIFT_FILES_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow(['File Path', 'Number of Keys'])
-            for file_path, count in file_analysis.items():
-                writer.writerow([file_path, count])
-        print_colored("\nSwift file details have been written to swift_files.csv", Fore.CYAN)
+        with EN_TRANSLATIONS_FILE.open('w', newline='') as en_csvfile:
+            en_writer = csv.DictWriter(en_csvfile, fieldnames=['key_id', 'translation_id', 'translation'])
+            en_writer.writeheader()
+            for t in translations:
+                if t['language_iso'] == 'en':
+                    en_writer.writerow({
+                        'key_id': t['key_id'],
+                        'translation_id': t['translation_id'],
+                        'translation': t['translation']
+                    })
+        print_colored(f"English translations saved to {EN_TRANSLATIONS_FILE}.", Fore.GREEN)
+
+        all_translations = {}
+        for t in translations:
+            key_id = t['key_id']
+            if key_id not in all_translations:
+                all_translations[key_id] = {'language_iso': [], 'translation_id': []}
+            all_translations[key_id]['language_iso'].append(t['language_iso'])
+            all_translations[key_id]['translation_id'].append(t['translation_id'])
+
+        with (REPORTS_DIR / 'all_translation_ids.csv').open('w', newline='') as all_csvfile:
+            all_writer = csv.writer(all_csvfile)
+            all_writer.writerow(['key_id', 'language_iso', 'translation_id'])
+            for key_id, data in all_translations.items():
+                all_writer.writerow([key_id, ','.join(data['language_iso']), ','.join(map(str, data['translation_id']))])
+
+        print_colored("All translations saved to all_translation_ids.csv.", Fore.GREEN)
     except Exception as e:
-        print_colored(f"Error writing to swift_files.csv: {e}", Fore.RED)
+        print_colored(f"ERROR: Failed to save translations - {e}", Fore.RED)
 
-    return localized_strings, file_analysis
-
-def load_strings_file(file_path):
-    strings = {}
+def fetch_keys(project_id, api_key):
+    all_keys = []
+    page = 1
     try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.readlines()
-            for line in content:
-                if '=' in line:
-                    key_value = line.split('=')
-                    key = key_value[0].strip().strip('"')
-                    value = key_value[1].strip().strip(';').strip().strip('"')
-                    strings[key] = value
-    except Exception as e:
-        print_colored(f"Error reading {file_path}: {e}", Fore.RED)
-    return strings
+        while True:
+            url = f"https://api.lokalise.com/api2/projects/{project_id}/keys?limit=500&page={page}"
+            headers = {"accept": "application/json", "X-Api-Token": api_key}
+            sys.stdout.write(f"\rFetching keys page {page}...")
+            sys.stdout.flush()
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            keys = response.json().get('keys', [])
+            if not keys:
+                break
+            all_keys.extend(keys)
+            page += 1
+            time.sleep(1 / REQUESTS_PER_SECOND)
+        sys.stdout.write("\n")
+    except requests.exceptions.RequestException as e:
+        print_colored(f"\nERROR: Failed to fetch keys - {e}", Fore.RED)
+    return all_keys
 
-def load_excluded_locales():
-    excluded_locales = set()
-    if EXCLUDED_LOCALES_PATH.exists():
-        config = configparser.ConfigParser()
-        config.read(EXCLUDED_LOCALES_PATH)
-        if 'EXCLUDED' in config and 'excluded_locales' in config['EXCLUDED']:
-            locales = config['EXCLUDED']['excluded_locales'].split(',')
-            excluded_locales = {locale.strip() for locale in locales}
-    print_colored(f"Excluded locales: {excluded_locales}", Fore.YELLOW)
-    return excluded_locales
-
-def compare_translations(localizable_dir, keys_to_check):
-    print_colored("Comparing translations...", Fore.CYAN)
-
-    missing_translations = {}
-    excluded_locales = load_excluded_locales()
-    en_path = os.path.join(localizable_dir, 'en.lproj', 'Localizable.strings')
-    en_strings = load_strings_file(en_path)
-
-    for language_dir in os.listdir(localizable_dir):
-        if language_dir.endswith('.lproj'):
-            lang_code = language_dir.replace('.lproj', '').split('-')[0]
-            if lang_code in excluded_locales:
-                continue
-
-            lang_path = os.path.join(localizable_dir, language_dir, 'Localizable.strings')
-            lang_strings = load_strings_file(lang_path)
-
-            for key in keys_to_check:
-                if key in en_strings and (key not in lang_strings or not lang_strings[key].strip()):
-                    if key not in missing_translations:
-                        missing_translations[key] = []
-                    missing_translations[key].append(lang_code)
-
+def save_keys_to_csv(keys):
     try:
-        with MISSING_TRANSLATIONS_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            for key, languages in missing_translations.items():
-                writer.writerow([key, ", ".join(languages)])
-        print_colored(f"\nMissing translations written to missing_ios_translations.csv", Fore.CYAN)
+        with CSV_FILE.open('w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['key_id', 'key_name'])
+            writer.writeheader()
+            for key in keys:
+                key_id = key['key_id']
+                key_name = next(iter(key['key_name'].values()), '')
+                writer.writerow({'key_id': key_id, 'key_name': key_name})
+        print_colored(f"Keys saved to {CSV_FILE}.", Fore.GREEN)
     except Exception as e:
-        print_colored(f"Error writing to missing_ios_translations.csv: {e}", Fore.RED)
+        print_colored(f"ERROR: Failed to save keys to CSV - {e}", Fore.RED)
 
-    return missing_translations
+def merge_keys_with_missing_translations():
+    try:
+        keys_dict = {}
+        with CSV_FILE.open('r') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                keys_dict[row['key_name']] = row['key_id']
+
+        with MISSING_TRANSLATIONS_FILE.open('r') as infile, MERGED_RESULT_FILE.open('w', newline='') as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(['key_name', 'key_id', 'languages'])
+            for row in csv.reader(infile):
+                key_name = row[0]
+                key_id = keys_dict.get(key_name, '')
+                writer.writerow([key_name, key_id] + row[1:])
+        print_colored(f"Merged results saved to {MERGED_RESULT_FILE}.", Fore.GREEN)
+    except Exception as e:
+        print_colored(f"ERROR: Failed to merge keys with missing translations - {e}", Fore.RED)
 
 def main():
-    if not color_enabled:
-        print("Colorama is not installed. Running without graphical enhancements...")
-
-    with CONFIG_PATH.open() as f:
-        config = json.load(f)
-        ios_project_path = config.get("project_paths", {}).get("ios")
-        localizable_dir = config.get("lokalise_paths", {}).get("ios")
-
-    if not ios_project_path or not os.path.isdir(ios_project_path):
-        print_colored("Invalid or missing iOS project path in config.", Fore.RED)
+    project_id, api_key = load_config()
+    if not project_id or not api_key:
+        print_colored("Lokalise project ID or API key missing. Please configure them in user_config.json", Fore.RED)
         return
 
-    if not localizable_dir or not os.path.isdir(localizable_dir):
-        print_colored("Invalid or missing Lokalise iOS path in config.", Fore.RED)
-        return
+    print_colored("Fetching translations from Lokalise...", Fore.CYAN)
+    translations = fetch_translations(project_id, api_key)
+    save_translations(translations)
 
-    global stop_loading
-    stop_loading = False
-    threading.Thread(target=spinner, daemon=True).start()
+    print_colored("Fetching keys from Lokalise...", Fore.CYAN)
+    keys = fetch_keys(project_id, api_key)
+    save_keys_to_csv(keys)
 
-    start_time = time.time()
-    localized_keys, file_analysis = extract_localized_strings(ios_project_path)
-    missing_translations = compare_translations(localizable_dir, localized_keys)
-
-    stop_loading = True
-    time.sleep(0.2)
-    end_time = time.time()
-    execution_time_ms = int((end_time - start_time) * 1000)
-
-    total_files = len(file_analysis)
-    files_with_keys = sum(1 for count in file_analysis.values() if count > 0)
-
-    if table_enabled:
-        summary_table = PrettyTable()
-        summary_table.field_names = ["Metric", "Value"]
-        summary_table.add_row(["Total keys used by the project", len(localized_keys)])
-        summary_table.add_row(["Keys with missing translations", len(missing_translations)])
-        summary_table.add_row(["Execution time (ms)", execution_time_ms])
-        summary_table.add_row(["Total .swift files analyzed", total_files])
-        summary_table.add_row([".swift files with at least one key", files_with_keys])
-        print_colored(summary_table.get_string(), Fore.CYAN)
-    else:
-        print_colored(f"\n--- Summary ---\n"
-                      f"Total keys: {len(localized_keys)}\n"
-                      f"Missing keys: {len(missing_translations)}\n"
-                      f"Time: {execution_time_ms} ms\n"
-                      f"Files analyzed: {total_files}\n"
-                      f"Files with keys: {files_with_keys}", Fore.CYAN)
+    print_colored("Merging keys with missing translations...", Fore.CYAN)
+    merge_keys_with_missing_translations()
 
 if __name__ == "__main__":
     main()
