@@ -3,7 +3,7 @@
 </p>
 
 
-
+![Logo](assets/logo.png)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/github/license/your-org/Lokalise-Translation-Manager-Tool.svg)](./LICENSE)
 [![Stars](https://img.shields.io/github/stars/your-org/Lokalise-Translation-Manager-Tool.svg?style=social)](https://github.com/your-org/Lokalise-Translation-Manager-Tool/stargazers)
