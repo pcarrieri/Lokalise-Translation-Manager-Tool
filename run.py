@@ -1,0 +1,92 @@
+# run.py - Entry point for Lokalise Translation Manager Tool (hybrid version)
+
+import os
+import subprocess
+import sys
+import json
+from pathlib import Path
+
+# Optional external libraries
+optional_libraries = [
+    'prettytable',
+    'colorama',
+    'tqdm',
+    'requests'
+]
+
+def install_package(package):
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to install {package}: {e}")
+
+def install_from_requirements():
+    requirements_file = Path("requirements.txt")
+    if requirements_file.exists():
+        print("\nInstalling dependencies from requirements.txt...\n")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)])
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install from requirements.txt: {e}\nFalling back to manual installation.")
+    else:
+        print("requirements.txt not found. Falling back to manual installation.")
+    return False
+
+def check_and_install_optional_libraries():
+    print("\nChecking and installing optional libraries...")
+    for package in optional_libraries:
+        try:
+            __import__(package)
+            print(f"{package} is already installed.")
+        except ImportError:
+            print(f"{package} is missing. Attempting to install...")
+            install_package(package)
+
+def get_user_config():
+    """
+    Prompt user for config (Lokalise + OpenAI) if not already provided
+    """
+    config_dir = Path("config")
+    config_file = config_dir / "user_config.json"
+    config_dir.mkdir(exist_ok=True)
+
+    if not config_file.exists():
+        print("\nFirst-time setup: please enter your configuration.")
+        config = {
+            "lokalise": {
+                "project_id": input("Enter your Lokalise project_id: ").strip(),
+                "api_key": input("Enter your Lokalise api_key: ").strip()
+            },
+            "openai": {
+                "api_key": input("Enter your OpenAI API key: ").strip()
+            },
+            "project_paths": input("Enter the path to the project directory (or directories separated by commas): ").split(',')
+        }
+
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=4)
+        print(f"Configuration saved to {config_file}.\n")
+    else:
+        print(f"Configuration already exists at {config_file}.\n")
+
+def main():
+    print("\nWelcome to Lokalise Translation Manager Tool 🚀\n")
+
+    used_requirements = install_from_requirements()
+    if not used_requirements:
+        check_and_install_optional_libraries()
+
+    get_user_config()
+
+    # Call main logic from core package
+    try:
+        from lokalise_translation_manager.core import run_main
+        run_main()
+    except ImportError as e:
+        print(f"Error importing main module: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+if __name__ == "__main__":
+    main()
