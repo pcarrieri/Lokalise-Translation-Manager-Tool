@@ -76,7 +76,10 @@ def get_user_config():
             "openai": {
                 "api_key": input("Enter your OpenAI API key: ").strip()
             },
-            "project_paths": input("Enter the path to the project directory (or directories separated by commas): ").split(',')
+            "project_paths": {
+            "ios": input("Enter the path to the iOS project directory: ").strip(),
+            "android": input("Enter the path to the Android project directory: ").strip()
+            }
         }
 
         with open(config_file, 'w') as f:
