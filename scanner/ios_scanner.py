@@ -153,8 +153,7 @@ def main():
     try:
         with CONFIG_PATH.open() as f:
             config = json.load(f)
-            project_paths = config.get("project_paths", [])
-            ios_path = project_paths[0].strip() if project_paths else None
+            ios_path = config.get("project_paths", {}).get("ios")
     except Exception as e:
         print_colored(f"Error reading config: {e}", Fore.RED)
         return
@@ -200,7 +199,7 @@ def main():
                       f"Files with keys: {files_with_keys}", Fore.CYAN)
 
     # Call Android scanner optionally
-    android_scanner.main()  # Uncomment if desired
+    # android_scanner.main()  # Uncomment if desired
 
 if __name__ == "__main__":
     main()
