@@ -1,8 +1,3 @@
-<p align="center">
-  <img src="assets/logo.png" alt="Lokalise Translation Manager Tool Logo" width="200"/>
-</p>
-
-
 ![Logo](assets/logo.png)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/github/license/your-org/Lokalise-Translation-Manager-Tool.svg)](./LICENSE)
