@@ -4,6 +4,7 @@ __pycache__/
 *.log
 *.csv
 *.json
+init_generator.py
 .DS_Store
 venv/
 reports/
