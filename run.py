@@ -77,8 +77,8 @@ def get_user_config():
                 "api_key": input("Enter your OpenAI API key: ").strip()
             },
             "project_paths": {
-            "ios": input("Enter the path to the iOS project directory: ").strip(),
-            "android": input("Enter the path to the Android project directory: ").strip()
+                "ios": input("Enter the path to the iOS project directory: ").strip(),
+                "android": input("Enter the path to the Android project directory: ").strip()
             }
         }
 
@@ -100,14 +100,21 @@ def main():
 
     get_user_config()
 
-    # Call the iOS scanner as a module
+    # Call the iOS and Android scanners as modules
     try:
         from lokalise_translation_manager.scanner.ios_scanner import main as run_ios_scanner
+        from lokalise_translation_manager.scanner.android_scanner import main as run_android_scanner
+
+        print("\n--- Running iOS Scanner ---\n")
         run_ios_scanner()
+
+        print("\n--- Running Android Scanner ---\n")
+        run_android_scanner()
+
     except ImportError as e:
-        print(f"Error importing ios_scanner module: {e}")
+        print(f"Error importing scanner modules: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred during iOS scan: {e}")
+        print(f"An unexpected error occurred during scanning: {e}")
 
 if __name__ == "__main__":
     main()
