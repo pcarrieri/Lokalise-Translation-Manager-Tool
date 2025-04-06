@@ -54,6 +54,11 @@ def run_tool():
         translate_module = importlib.import_module("lokalise_translation_manager.translator.translate_with_openai")
         translate_module.main()
 
+        # Step 8: Upload translations to Lokalise
+        print_colored("\nUploading translations to Lokalise...", Fore.CYAN)
+        upload_module = importlib.import_module("lokalise_translation_manager.utils.upload_translations")
+        upload_module.main()
+
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
     except ModuleNotFoundError as e:
