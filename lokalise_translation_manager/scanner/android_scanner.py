@@ -1,4 +1,4 @@
-# android_scanner.py - Modular Android scanning script
+# android_scanner.py - Android localization key scanner
 
 import os
 import re
@@ -7,6 +7,7 @@ import time
 import threading
 import json
 from pathlib import Path
+import configparser
 
 try:
     from colorama import Fore, Style, init
@@ -21,13 +22,14 @@ try:
 except ImportError:
     table_enabled = False
 
-# Define directories
+# Define paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-REPORTS_DIR = BASE_DIR / "reports" / "android"
 CONFIG_PATH = BASE_DIR / "config" / "user_config.json"
-MISSING_TRANSLATIONS_CSV = REPORTS_DIR / "missing_android_translations.csv"
+EXCLUDED_LOCALES_PATH = BASE_DIR / "config" / "excluded_locales.ini"
+REPORTS_DIR = BASE_DIR / "reports" / "android"
 FINAL_RESULT_CSV = REPORTS_DIR / "final_result_android.csv"
 TOTAL_KEYS_CSV = REPORTS_DIR / "total_keys_used_android.csv"
+MISSING_TRANSLATIONS_CSV = REPORTS_DIR / "missing_android_translations.csv"
 
 
 def print_colored(text, color):
@@ -58,6 +60,26 @@ def extract_localized_strings(directory):
                 except Exception as e:
                     print_colored(f"Error reading {file_path}: {e}", Fore.RED)
 
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with FINAL_RESULT_CSV.open('w', newline='', encoding='utf-8') as csv_file:
+            writer = csv.writer(csv_file)
+            for string in sorted(localized_strings):
+                writer.writerow([string])
+        print_colored("\nResults have been written to final_result_android.csv", Fore.CYAN)
+    except Exception as e:
+        print_colored(f"Error writing to final_result_android.csv: {e}", Fore.RED)
+
+    try:
+        with TOTAL_KEYS_CSV.open('w', newline='', encoding='utf-8') as csv_file:
+            writer = csv.writer(csv_file)
+            for string in sorted(localized_strings):
+                writer.writerow([string])
+        print_colored("\nTotal keys have been written to total_keys_used_android.csv", Fore.CYAN)
+    except Exception as e:
+        print_colored(f"Error writing to total_keys_used_android.csv: {e}", Fore.RED)
+
     return localized_strings, file_analysis
 
 def load_strings_file(file_path):
@@ -65,7 +87,7 @@ def load_strings_file(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             content = file.read()
-            matches = re.findall(r'<string name="([^"]+)">(.*?)</string>', content, re.DOTALL)
+            matches = re.findall(r'<string name=\"([^\"]+)\">(.*?)</string>', content, re.DOTALL)
             for match in matches:
                 key, value = match
                 strings[key] = value.strip() != ""
@@ -73,9 +95,22 @@ def load_strings_file(file_path):
         print_colored(f"Error reading {file_path}: {e}", Fore.RED)
     return strings
 
+def load_excluded_locales():
+    excluded_locales = set()
+    if EXCLUDED_LOCALES_PATH.exists():
+        config = configparser.ConfigParser()
+        config.read(EXCLUDED_LOCALES_PATH)
+        if 'EXCLUDED' in config and 'excluded_locales' in config['EXCLUDED']:
+            locales = config['EXCLUDED']['excluded_locales'].split(',')
+            excluded_locales = {locale.strip() for locale in locales}
+    print_colored(f"Excluded locales: {excluded_locales}", Fore.YELLOW)
+    return excluded_locales
+
 def compare_translations(values_dir, project_dir, keys_to_check):
     print_colored("Comparing translations...", Fore.CYAN)
+
     missing_translations = {}
+    excluded_locales = load_excluded_locales()
     en_path = os.path.join(values_dir, 'values', 'strings.xml')
     en_strings = load_strings_file(en_path)
 
@@ -89,26 +124,26 @@ def compare_translations(values_dir, project_dir, keys_to_check):
         for dir_name in dirs:
             if dir_name.startswith('values-'):
                 lang_code = dir_name.split('-')[1]
+                if lang_code in excluded_locales:
+                    continue
                 if lang_code in supported_languages:
                     lang_path = os.path.join(root, dir_name, 'strings.xml')
                     lang_strings = load_strings_file(lang_path)
+
                     for key in keys_to_check:
                         if key in en_strings and (key not in lang_strings or not lang_strings[key]):
                             if key not in missing_translations:
                                 missing_translations[key] = []
                             missing_translations[key].append(lang_code)
 
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
     try:
         with MISSING_TRANSLATIONS_CSV.open('w', newline='', encoding='utf-8') as csv_file:
             writer = csv.writer(csv_file)
             for key, languages in missing_translations.items():
-                if languages:
-                    writer.writerow([key, ", ".join(languages)])
-        print_colored(f"Results have been written to {MISSING_TRANSLATIONS_CSV}", Fore.CYAN)
+                writer.writerow([key, ", ".join(languages)])
+        print_colored(f"\nMissing translations written to missing_android_translations.csv", Fore.CYAN)
     except Exception as e:
-        print_colored(f"Error writing to CSV: {e}", Fore.RED)
+        print_colored(f"Error writing to missing_android_translations.csv: {e}", Fore.RED)
 
     return missing_translations
 
@@ -116,38 +151,26 @@ def main():
     if not color_enabled:
         print("Colorama is not installed. Running without graphical enhancements...")
 
-    try:
-        with CONFIG_PATH.open() as f:
-            config = json.load(f)
-            android_path = config.get("project_paths", {}).get("android")
-    except Exception as e:
-        print_colored(f"Error reading config: {e}", Fore.RED)
+    with CONFIG_PATH.open() as f:
+        config = json.load(f)
+        android_project_path = config.get("project_paths", {}).get("android")
+        values_dir = config.get("lokalise_paths", {}).get("android")
+
+    if not android_project_path or not os.path.isdir(android_project_path):
+        print_colored("Invalid or missing Android project path in config.", Fore.RED)
         return
 
-    if not android_path or not os.path.isdir(android_path):
-        print_colored("Invalid Android project path.", Fore.RED)
+    if not values_dir or not os.path.isdir(values_dir):
+        print_colored("Invalid or missing Lokalise Android path in config.", Fore.RED)
         return
 
-    values_dir = android_path
     global stop_loading
     stop_loading = False
     threading.Thread(target=spinner, daemon=True).start()
 
     start_time = time.time()
-    localized_strings, file_analysis = extract_localized_strings(android_path)
-    missing_translations = compare_translations(values_dir, android_path, localized_strings)
-
-    try:
-        with FINAL_RESULT_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            for key in missing_translations:
-                writer.writerow([key])
-        with TOTAL_KEYS_CSV.open('w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            for key in sorted(localized_strings):
-                writer.writerow([key])
-    except Exception as e:
-        print_colored(f"Error writing report files: {e}", Fore.RED)
+    localized_keys, file_analysis = extract_localized_strings(android_project_path)
+    missing_translations = compare_translations(values_dir, android_project_path, localized_keys)
 
     stop_loading = True
     time.sleep(0.2)
@@ -160,7 +183,7 @@ def main():
     if table_enabled:
         summary_table = PrettyTable()
         summary_table.field_names = ["Metric", "Value"]
-        summary_table.add_row(["Total keys used by the project", len(localized_strings)])
+        summary_table.add_row(["Total keys used by the project", len(localized_keys)])
         summary_table.add_row(["Keys with missing translations", len(missing_translations)])
         summary_table.add_row(["Execution time (ms)", execution_time_ms])
         summary_table.add_row(["Total .kt/.java files analyzed", total_files])
@@ -168,7 +191,7 @@ def main():
         print_colored(summary_table.get_string(), Fore.CYAN)
     else:
         print_colored(f"\n--- Summary ---\n"
-                      f"Total keys: {len(localized_strings)}\n"
+                      f"Total keys: {len(localized_keys)}\n"
                       f"Missing keys: {len(missing_translations)}\n"
                       f"Time: {execution_time_ms} ms\n"
                       f"Files analyzed: {total_files}\n"
