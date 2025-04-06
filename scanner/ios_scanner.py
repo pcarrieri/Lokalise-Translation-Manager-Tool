@@ -200,7 +200,7 @@ def main():
                       f"Files with keys: {files_with_keys}", Fore.CYAN)
 
     # Call Android scanner optionally
-    # android_scanner.main()  # Uncomment if desired
+    android_scanner.main()  # Uncomment if desired
 
 if __name__ == "__main__":
     main()
