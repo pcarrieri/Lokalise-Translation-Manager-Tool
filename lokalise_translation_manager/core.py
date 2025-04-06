@@ -59,6 +59,11 @@ def run_tool():
         upload_module = importlib.import_module("lokalise_translation_manager.utils.upload_translations")
         upload_module.main()
 
+        # Step 9: Clean unused keys on Lokalise
+        print_colored("\nListing all unused keys from Lokalise...", Fore.CYAN)
+        upload_module = importlib.import_module("lokalise_translation_manager.utils.cleanup_unused_keys")
+        upload_module.main()
+
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
     except ModuleNotFoundError as e:
