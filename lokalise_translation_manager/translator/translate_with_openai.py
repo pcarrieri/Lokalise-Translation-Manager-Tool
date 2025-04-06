@@ -23,13 +23,7 @@ CONFIG_PATH = BASE_DIR / "config" / "user_config.json"
 
 MOCK_FILE = REPORTS_DIR / "ready_to_translations_mock.csv"
 REAL_FILE = REPORTS_DIR / "ready_to_translations.csv"
-
 INPUT_FILE = MOCK_FILE if MOCK_FILE.exists() else REAL_FILE
-
-if MOCK_FILE.exists():
-    print(Fore.YELLOW + "⚠️  Using mock file 'ready_to_translations_mock.csv' for translation." + Style.RESET_ALL)
-    print(Fore.YELLOW + "   Delete this file to restore normal translation input." + Style.RESET_ALL)
-
 OUTPUT_FILE = REPORTS_DIR / "translation_done.csv"
 PLUGINS_DIR = BASE_DIR / "lokalise_translation_manager" / "plugins"
 
@@ -40,6 +34,17 @@ def print_colored(text, color=None):
         print(color + text + Style.RESET_ALL)
     else:
         print(text)
+
+def show_summary(prompt_plugins):
+    print_colored("\n===== OPENAI TRANSLATION SUMMARY =====", Fore.CYAN)
+    print(f"Model: GPT-4o")
+    print(f"Input file: {INPUT_FILE.name}{' (mock)' if INPUT_FILE == MOCK_FILE else ''}")
+    print(f"Output file: {OUTPUT_FILE.name}")
+    print(f"PROMPT plugins: {', '.join(prompt_plugins) if prompt_plugins else 'None'}")
+    print(f"Estimated cost: ~750 tokens per translation")
+    print(f"Plugin directory: {PLUGINS_DIR}\n")
+    if MOCK_FILE.exists():
+        print_colored("⚠️  Using mock file 'ready_to_translations_mock.csv'. Delete it to use the real input.", Fore.YELLOW)
 
 def loader(key_name, languages, total_translations, completed_translations):
     start_time = time.time()
@@ -121,7 +126,11 @@ def run_translation(api_key):
         next(reader)
 
         prompt_plugins = load_plugins("PROMPT")
+        show_summary(prompt_plugins)
         prompt_text = " ".join(prompt_plugins)
+
+        start = time.time()
+        translated_count = 0
 
         for row in reader:
             if row['key_id'] in completed_keys:
@@ -137,6 +146,7 @@ def run_translation(api_key):
                 translation = translate_text(client, row['translation'], lang, prompt_text)
                 translations.append(translation)
                 done_count += 1
+                translated_count += 1
 
             stop_loader = True
             thread.join()
@@ -144,10 +154,14 @@ def run_translation(api_key):
             row['translated'] = '|'.join(translations)
             writer.writerow(row)
 
-    print_colored(f"\nTranslations saved to {OUTPUT_FILE}.", Fore.GREEN)
+    elapsed = time.time() - start
+    print_colored(f"\n✅ Translations saved to {OUTPUT_FILE}", Fore.GREEN)
+    print_colored(f"\n===== TRANSLATION COMPLETE =====", Fore.CYAN)
+    print_colored(f"Total translations performed: {translated_count}", Fore.CYAN)
+    print_colored(f"Elapsed time: {elapsed:.2f} seconds\n", Fore.CYAN)
 
 def main():
-    print_colored("\nStarting OpenAI Translation...", Fore.CYAN)
+    print_colored("\n🔁 Starting OpenAI Translation...", Fore.CYAN)
     key = get_api_key()
     run_translation(key)
 
