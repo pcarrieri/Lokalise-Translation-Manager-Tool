@@ -1,4 +1,13 @@
-# 🌍 Lokalise Translation Manager Tool
+<p align="center">
+  <img src="assets/logo.png" alt="Logo" width="180"/>
+</p>
+
+<h1 align="center">🌍 Lokalise Translation Manager Tool</h1>
+
+<p align="center">
+  Automate, translate, and manage localization from CLI – powered by Lokalise & GPT
+</p>
+
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/github/license/your-org/Lokalise-Translation-Manager-Tool.svg)](./LICENSE)
