@@ -6,6 +6,11 @@ import sys
 import json
 from pathlib import Path
 
+# 🔧 Aggiungi la root del progetto al sys.path
+ROOT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT_DIR))
+
+
 # Standard libraries (for user info)
 standard_libraries = [
     'os', 're', 'csv', 'time', 'threading', 'subprocess',
