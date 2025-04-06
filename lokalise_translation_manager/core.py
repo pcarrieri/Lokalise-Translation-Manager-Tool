@@ -14,6 +14,11 @@ def print_colored(text, color):
 
 def run_tool():
     try:
+        # Step 0: Download Lokalise files
+        print_colored("\nDownloading Lokalise files...", Fore.CYAN)
+        download_module = importlib.import_module("lokalise_translation_manager.download.download_lokalise_files")
+        download_module.main()
+
         # Step 1: Run iOS scanner
         print_colored("\nRunning iOS scanner...", Fore.CYAN)
         ios_scanner = importlib.import_module("lokalise_translation_manager.scanner.ios_scanner")
@@ -28,9 +33,6 @@ def run_tool():
         print_colored("\nMerging iOS and Android missing translations...", Fore.CYAN)
         merge_module = importlib.import_module("lokalise_translation_manager.utils.merge_translations")
         merge_module.run_merge()
-
-        # Step 4: Additional steps (e.g., download all Lokalise keys)
-        # You can uncomment and expand here if needed
 
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
