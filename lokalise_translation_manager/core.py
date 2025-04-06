@@ -34,6 +34,11 @@ def run_tool():
         merge_module = importlib.import_module("lokalise_translation_manager.utils.merge_translations")
         merge_module.run_merge()
 
+        # Step 4: Download all Lokalise keys after merge
+        print_colored("\nDownloading all Lokalise keys for final processing...", Fore.CYAN)
+        keys_module = importlib.import_module("lokalise_translation_manager.utils.download_lokalise_keys")
+        keys_module.main()
+
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
     except ModuleNotFoundError as e:
