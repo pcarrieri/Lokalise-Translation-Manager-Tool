@@ -44,6 +44,11 @@ def run_tool():
         normalize_module = importlib.import_module("lokalise_translation_manager.utils.normalize_translations")
         normalize_module.process_normalization()
 
+        # Step 6: Prepare final file for translation engine
+        print_colored("\nPreparing final file for translation engine...", Fore.CYAN)
+        prepare_module = importlib.import_module("lokalise_translation_manager.utils.prepare_translations")
+        prepare_module.main()
+
         print_colored("\n✅ All steps completed.", Fore.GREEN)
 
     except ModuleNotFoundError as e:
