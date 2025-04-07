@@ -1,6 +1,7 @@
 # core.py - Main execution flow of Lokalise Translation Manager Tool
 
 import importlib
+import webbrowser
 
 try:
     from colorama import Fore, init
@@ -11,6 +12,9 @@ except ImportError:
 
 def print_colored(text, color):
     print(color + text if color_enabled else text)
+
+def open_browser():
+    webbrowser.open('http://localhost:5173')
 
 def run_tool():
     try:
@@ -61,10 +65,14 @@ def run_tool():
 
         # Step 9: Clean unused keys on Lokalise
         print_colored("\nListing all unused keys from Lokalise...", Fore.CYAN)
-        upload_module = importlib.import_module("lokalise_translation_manager.utils.cleanup_unused_keys")
-        upload_module.main()
+        cleanup_module = importlib.import_module("lokalise_translation_manager.utils.cleanup_unused_keys")
+        cleanup_module.main()
 
         print_colored("\n✅ All steps completed.", Fore.GREEN)
+
+        # Step 10: Open browser to show CSV reports
+        print_colored("\nOpening browser for CSV report visualization...", Fore.CYAN)
+        open_browser()
 
     except ModuleNotFoundError as e:
         print_colored(f"Error: Missing module - {e}", Fore.RED)
