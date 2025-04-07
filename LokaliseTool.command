@@ -49,7 +49,27 @@ fi
 source venv/bin/activate
 echo "✅ Virtual environment activated."
 
-# Run the tool
+# Start Flask backend
+echo "🚀 Starting Flask backend..."
+(
+  cd "$(dirname "$0")/webapp/backend"
+  pip install -r requirements.txt
+  python app.py &
+)
+
+# Start React frontend
+echo "⚛️ Starting React frontend..."
+(
+  cd "$(dirname "$0")/webapp/frontend"
+  npm install
+  npm run dev &
+)
+
+# Give backend and frontend some time to start
+echo "⏳ Waiting for backend/frontend to be ready..."
+sleep 5  # Attesa prudenziale (5 secondi circa)
+
+# Run the tool (questo apre automaticamente il browser all'ultimo step)
 echo "🚀 Launching Lokalise Translation Manager Tool..."
 $PYTHON_COMMAND run.py
 
