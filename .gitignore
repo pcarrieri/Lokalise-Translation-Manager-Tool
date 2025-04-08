@@ -8,4 +8,5 @@ init_generator.py
 .DS_Store
 venv/
 reports/
+node_modules/
 lokalise_translation_manager/lokalise_files
