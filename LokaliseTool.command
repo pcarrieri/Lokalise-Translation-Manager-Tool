@@ -67,6 +67,13 @@ if lsof -i :5050 &>/dev/null; then
   kill -9 $PID
 fi
 
+# Kill existing process on port 5173 if needed
+if lsof -i :5173 &>/dev/null; then
+  echo "🛑 Porta 5173 occupata, chiudo il processo esistente..."
+  PID=$(lsof -ti :5173)
+  kill -9 $PID
+fi
+
 # Start Flask backend
 (
   echo "🚀 Starting Flask backend..."
