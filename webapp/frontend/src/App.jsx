@@ -39,6 +39,7 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [showOnlyChanges, setShowOnlyChanges] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const gridRef = useRef(null);
 
@@ -100,6 +101,23 @@ const App = () => {
     });
   };
 
+  const exportCSV = () => {
+    setExporting(true);
+    // TODO: implementazione reale
+    setTimeout(() => {
+      alert('📤 CSV esportato!');
+      setExporting(false);
+    }, 800);
+  };
+
+  const resetFile = () => {
+    if (confirm('Sei sicuro di voler annullare tutte le modifiche?')) {
+      const data = JSON.parse(originalData);
+      setRowData(data);
+      setHasChanges(false);
+    }
+  };
+
   const handleChange = (params) => {
     const updated = [...rowData];
     updated[params.node.rowIndex] = params.data;
@@ -119,19 +137,38 @@ const App = () => {
 
   return (
     <div className="page-container">
-      <header className="flex justify-between items-center w-full mb-6">
-        <h1 className="text-2xl font-bold text-center w-full">
-          Lokalise Translation Manager Tool Report
-        </h1>
-        <div className="theme-switch">
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={darkMode}
-              onChange={() => setDarkMode(prev => !prev)}
-            />
-            <span className="slider" />
-          </label>
+      <header className="toolbar">
+        <h1 className="toolbar-title">Lokalise Translation Manager Tool Report</h1>
+        <div className="toolbar-buttons">
+          <div className="toolbar-button">
+            <label className="label">Tema</label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={() => setDarkMode(prev => !prev)}
+              />
+              <span className="slider" />
+            </label>
+          </div>
+          <div className="toolbar-button">
+            <label className="label">Esporta</label>
+            <button className="action-button" onClick={exportCSV} disabled={exporting}>
+              📤
+            </button>
+          </div>
+          <div className="toolbar-button">
+            <label className="label">Ripristina</label>
+            <button className="action-button" onClick={resetFile} disabled={!hasChanges}>
+              🔁
+            </button>
+          </div>
+          <div className="toolbar-stats">
+            <span>📄 {rowData.length} righe</span>
+            {hasChanges && (
+              <span className="text-yellow-500 ml-2">✏️ {getModifiedRows().length} modificate</span>
+            )}
+          </div>
         </div>
       </header>
 

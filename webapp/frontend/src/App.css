@@ -15,8 +15,9 @@ html, body, #root {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-/* === Dark Mode === */
-.dark {
+.dark html,
+.dark body,
+.dark #root {
   background-color: #1c1c1e;
   color: #f5f5f7;
 }
@@ -41,7 +42,55 @@ h1 {
   color: inherit;
 }
 
-/* === File selector and controls === */
+/* === Toolbar con pulsanti === */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.toolbar-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.toolbar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.toolbar-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.dark .label {
+  color: #aaa;
+}
+
+.toolbar-stats {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* === File selector === */
 .file-selector {
   display: flex;
   flex-wrap: wrap;
@@ -51,7 +100,7 @@ h1 {
   margin-bottom: 1rem;
 }
 
-/* === Buttons & selects === */
+/* === Select & base buttons === */
 select,
 button {
   padding: 0.6rem 1rem;
@@ -91,12 +140,105 @@ button:active {
   background-color: #0063e0;
 }
 
+/* === Pulsanti tondi (azione singola) === */
+.action-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  background-color: #e5e7eb;
+  color: #1c1c1e;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.action-button:hover {
+  background-color: #d1d5db;
+  transform: scale(1.1);
+}
+
+.action-button:active {
+  transform: scale(0.95);
+}
+
+.action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dark .action-button {
+  background-color: #2c2c2e;
+  color: #f5f5f7;
+}
+
+.dark .action-button:hover {
+  background-color: #3a3a3c;
+}
+
+/* === Checkbox theme toggle === */
 input[type="checkbox"] {
   accent-color: #007aff;
 }
 
 .dark input[type="checkbox"] {
   accent-color: #0a84ff;
+}
+
+/* === iOS-style switch === */
+.theme-switch {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  border-radius: 34px;
+  transition: 0.4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.4s;
+}
+
+.switch input:checked + .slider {
+  background-color: #007aff;
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+.dark .slider {
+  background-color: #444;
+}
+
+.dark .switch input:checked + .slider {
+  background-color: #0a84ff;
 }
 
 /* === Grid === */
@@ -134,7 +276,7 @@ input[type="checkbox"] {
   background-color: #3a3a3c;
 }
 
-/* === Celle modificate === */
+/* Celle modificate */
 .cell-modified {
   background-color: #fff3cd;
   color: #000;
@@ -146,76 +288,37 @@ input[type="checkbox"] {
   color: #ffd;
 }
 
-/* === Toggle tema === */
-.theme-toggle {
-  position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
-  font-size: 1.5rem;
-  cursor: pointer;
-  background: none;
-  border: none;
+/* Override ag-theme-alpine per dark mode */
+.dark .ag-theme-alpine {
+  --ag-background-color: #1c1c1e;
+  --ag-foreground-color: #f5f5f7;
+  --ag-header-background-color: #2c2c2e;
+  --ag-header-foreground-color: #f5f5f7;
+  --ag-border-color: #3a3a3c;
 }
 
-.theme-switch {
-  position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
+.dark .ag-theme-alpine .ag-row {
+  background-color: #1f1f1f !important;
+  color: #f5f5f5 !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* iOS-style switch */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 28px;
+.dark .ag-theme-alpine .ag-row.ag-row-even {
+  background-color: #1f1f1f !important;
 }
 
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
+.dark .ag-theme-alpine .ag-row:hover {
+  background-color: #2a2a2c !important;
 }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #ccc;
-  border-radius: 34px;
-  transition: 0.4s;
+.dark .ag-theme-alpine .ag-cell-focus {
+  border: 1px solid #0a84ff !important;
 }
 
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.4s;
+.dark .ag-theme-alpine .ag-row-selected {
+  background-color: #0a84ff !important;
+  color: white !important;
 }
-
-/* ON state */
-.switch input:checked + .slider {
-  background-color: #007aff;
-}
-
-.switch input:checked + .slider:before {
-  transform: translateX(22px);
-}
-
-/* Dark mode fix */
-.dark .slider {
-  background-color: #444;
-}
-
-.dark .switch input:checked + .slider {
-  background-color: #0a84ff;
-}
-
 
 /* === Responsive === */
 @media (max-width: 768px) {
@@ -227,47 +330,13 @@ input[type="checkbox"] {
   .ag-grid-custom .ag-cell {
     font-size: 0.85rem;
   }
-}
 
-/* Override ag-theme-alpine per dark mode */
-.dark .ag-theme-alpine {
-  --ag-background-color: #1c1c1e;
-  --ag-foreground-color: #f5f5f7;
-  --ag-header-background-color: #2c2c2e;
-  --ag-header-foreground-color: #f5f5f7;
-  --ag-border-color: #3a3a3c;
-}
+  .toolbar-buttons {
+    gap: 1rem;
+  }
 
-/* ROW BASE: background coerente */
-.dark .ag-theme-alpine .ag-row {
-  background-color: #1f1f1f !important;
-  color: #f5f5f5 !important;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-/* RIGA ALTERNATA: disabilita striping chiaro-scuro */
-.dark .ag-theme-alpine .ag-row.ag-row-even {
-  background-color: #1f1f1f !important;
-}
-
-/* HOVER */
-.dark .ag-theme-alpine .ag-row:hover {
-  background-color: #2a2a2c !important;
-}
-
-/* CELLA SELEZIONATA O EDITATA */
-.dark .ag-theme-alpine .ag-cell-focus {
-  border: 1px solid #0a84ff !important;
-}
-
-.dark .ag-theme-alpine .ag-row-selected {
-  background-color: #0a84ff !important;
-  color: white !important;
-}
-
-.dark html,
-.dark body,
-.dark #root {
-  background-color: #1c1c1e;
-  color: #f5f5f7;
+  .toolbar-stats {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
