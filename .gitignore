@@ -11,4 +11,7 @@ venv/
 reports/
 node_modules/
 config/*.ini
+make_release.sh
+LokaliseTool.bat
+LokaliseTool.command
 lokalise_translation_manager/lokalise_files
