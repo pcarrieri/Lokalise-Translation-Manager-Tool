@@ -3,7 +3,7 @@
 :: === PATH ===
 cd /d %~dp0
 
-:: === Define cleanup function ===
+:: === Cleanup function ===
 setlocal EnableDelayedExpansion
 set "FLASK_PID_FILE=%TEMP%\flask_server.pid"
 set "VITE_PID_FILE=%TEMP%\vite_server.pid"
@@ -17,6 +17,12 @@ if exist !VITE_PID_FILE! (
   for /f "usebackq" %%p in (!VITE_PID_FILE!) do taskkill /F /PID %%p >nul 2>&1
   del /f /q !VITE_PID_FILE! >nul 2>&1
 )
+
+:: === Kill port 5050 if used ===
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5050') do taskkill /F /PID %%a >nul 2>&1
+
+:: === Kill port 5173 if used ===
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173') do taskkill /F /PID %%a >nul 2>&1
 
 :: === Python version check ===
 echo Checking Python version...
@@ -55,7 +61,6 @@ cd ..\frontend
 call npm install
 start /min cmd /c "npm run dev" && echo !ERRORLEVEL! > !VITE_PID_FILE!
 
-:: === Back to root dir ===
 cd ..\..
 
 :: === Run Python tool ===
@@ -68,4 +73,3 @@ call :cleanup
 echo.
 echo ✅ Operazione completata. Premere un tasto per uscire.
 pause >nul
-exit /b
