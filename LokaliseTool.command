@@ -60,6 +60,13 @@ source venv/bin/activate
 
 echo "✅ Virtual environment activated."
 
+# Kill existing process on port 5050 if needed
+if lsof -i :5050 &>/dev/null; then
+  echo "🛑 Porta 5050 occupata, chiudo il processo esistente..."
+  PID=$(lsof -ti :5050)
+  kill -9 $PID
+fi
+
 # Start Flask backend
 (
   echo "🚀 Starting Flask backend..."
