@@ -10,4 +10,5 @@ init_generator.py
 venv/
 reports/
 node_modules/
+config/*.ini
 lokalise_translation_manager/lokalise_files
