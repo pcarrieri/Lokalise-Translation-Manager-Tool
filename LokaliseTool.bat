@@ -3,6 +3,21 @@
 :: === PATH ===
 cd /d %~dp0
 
+:: === Define cleanup function ===
+setlocal EnableDelayedExpansion
+set "FLASK_PID_FILE=%TEMP%\flask_server.pid"
+set "VITE_PID_FILE=%TEMP%\vite_server.pid"
+
+:cleanup
+if exist !FLASK_PID_FILE! (
+  for /f "usebackq" %%p in (!FLASK_PID_FILE!) do taskkill /F /PID %%p >nul 2>&1
+  del /f /q !FLASK_PID_FILE! >nul 2>&1
+)
+if exist !VITE_PID_FILE! (
+  for /f "usebackq" %%p in (!VITE_PID_FILE!) do taskkill /F /PID %%p >nul 2>&1
+  del /f /q !VITE_PID_FILE! >nul 2>&1
+)
+
 :: === Python version check ===
 echo Checking Python version...
 python --version >nul 2>&1
@@ -32,13 +47,13 @@ echo ✅ Virtual environment activated.
 echo 🚀 Avvio backend Flask...
 cd webapp\backend
 pip install -r requirements.txt
-start /min cmd /c "python app.py"
+start /min cmd /c "python app.py" && echo !ERRORLEVEL! > !FLASK_PID_FILE!
 
 :: === Start React frontend ===
 echo ⚛️ Avvio frontend React...
 cd ..\frontend
 call npm install
-start /min cmd /c "npm run dev"
+start /min cmd /c "npm run dev" && echo !ERRORLEVEL! > !VITE_PID_FILE!
 
 :: === Back to root dir ===
 cd ..\..
@@ -47,7 +62,10 @@ cd ..\..
 echo ▶️  Esecuzione dello script principale Python...
 python run.py
 
-:: === Done ===
+:: === Cleanup ===
+call :cleanup
+
 echo.
 echo ✅ Operazione completata. Premere un tasto per uscire.
 pause >nul
+exit /b
