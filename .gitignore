@@ -4,9 +4,11 @@ __pycache__/
 *.log
 *.csv
 *.json
+/tmp/*.pid
 init_generator.py
 .DS_Store
 venv/
 reports/
 node_modules/
+config/*.ini
 lokalise_translation_manager/lokalise_files
