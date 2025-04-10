@@ -47,14 +47,18 @@ def fetch_lokalise_file(project_id, api_key, platform, format, save_dir):
     process_id = response.json().get("process_id")
 
     spinner = itertools.cycle(['-', '/', '|', '\\'])
-    for _ in range(10):
+    max_attempts = 30
+    wait_seconds = 5.0  # starting wait 5 seconds
+    old_status = ""
+
+    for attempt in range(1, max_attempts + 1):
         status_url = f"https://api.lokalise.com/api2/projects/{project_id}/processes/{process_id}"
         response = requests.get(status_url, headers=headers)
         if response.status_code == 200:
             process_info = response.json().get("process", {})
             status = process_info.get("status")
             message = process_info.get("message", "No message")
-            sys.stdout.write(f"\r{Fore.CYAN if use_colors else ''}Fetching {platform}... {next(spinner)} Status: {status} - {message}")
+            sys.stdout.write(f"\r{Fore.CYAN if use_colors else ''}Fetching {platform}... {next(spinner)} Attempt {attempt} - Status: {status}")
             sys.stdout.flush()
             if status == "finished":
                 download_url = process_info.get("details", {}).get("download_url")
@@ -66,9 +70,17 @@ def fetch_lokalise_file(project_id, api_key, platform, format, save_dir):
                     print(f"\n{Fore.GREEN if use_colors else ''}{platform} file downloaded to {save_path}")
                     extract_zip(save_path, save_dir)
                     return os.path.abspath(save_dir)
-        time.sleep(5)
+        else:
+            print(f"\n{Fore.RED if use_colors else ''}Attempt {attempt}: Unexpected status code {response.status_code}")
 
-    raise TimeoutError(f"\n{Fore.RED if use_colors else ''}Failed to download {platform} file after 10 attempts.")
+        if status == old_status:
+            wait_seconds *= 1.5  # progressively increase the waiting time
+        else:
+            wait_seconds = 5.0
+        old_status = status
+        time.sleep(wait_seconds)
+
+    raise TimeoutError(f"\n{Fore.RED if use_colors else ''}Failed to download {platform} file after {attempt} attempts.")
 
 def main():
     if not CONFIG_PATH.exists():
