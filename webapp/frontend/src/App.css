@@ -241,10 +241,9 @@ input[type="checkbox"] {
   background-color: #0a84ff;
 }
 
-/* === Grid === */
 .grid-wrapper {
   width: 100%;
-  padding: 1rem 0;
+  padding: 0.5rem 0; /* ridotto da 1rem a 0.5rem */
   display: flex;
   justify-content: center;
 }
@@ -340,3 +339,139 @@ input[type="checkbox"] {
     align-items: flex-start;
   }
 }
+
+.file-navbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  position: relative;
+  height: auto !important; /* 🔥 Forza altezza minima */
+  max-height: 200px;        /* 🔒 Evita che cresca esageratamente */
+  overflow: visible;
+}
+
+.file-navbar .file-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.file-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.tools-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  height: auto !important; /* 🔒 Evita inflazione verticale */
+}
+
+.file-tab:hover {
+  background-color: #d1d5db;
+}
+
+.file-tab.active {
+  background-color: #007aff;
+  color: white;
+}
+
+.dark .file-tab {
+  background-color: #2c2c2e;
+  color: #f5f5f7;
+}
+
+.dark .file-tab:hover {
+  background-color: #3a3a3c;
+}
+
+.dark .file-tab.active {
+  background-color: #0a84ff;
+  color: white;
+}
+
+.tools-tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  background-color: #e5e7eb;
+  color: #1c1c1e;
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.tools-tab:hover {
+  background-color: #d1d5db;
+}
+
+.dark .tools-tab {
+  background-color: #2c2c2e;
+  color: #f5f5f7;
+}
+
+.dark .tools-tab:hover {
+  background-color: #3a3a3c;
+}
+
+
+.file-navbar select.file-dropdown {
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  border-radius: 0.75rem;
+  border: 1px solid #ccc;
+  background-color: white;
+  color: #1c1c1e;
+}
+
+.dark .file-navbar select.file-dropdown {
+  background-color: #2c2c2e;
+  color: #f5f5f7;
+  border-color: #444;
+}
+
+.tools-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+}
+
+.tools-menu {
+  background-color: white;
+  color: #1c1c1e;
+  border: 1px solid #ccc;
+  transform-origin: top right;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 999;
+}
+
+.tools-menu.scale-100 {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tools-menu.opacity-100 {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dark .tools-menu {
+  background-color: #2c2c2e;
+  color: #f5f5f7;
+  border-color: #444;
+}
+
+
