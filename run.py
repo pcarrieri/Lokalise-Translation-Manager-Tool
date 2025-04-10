@@ -1,4 +1,4 @@
-# run.py - Entry point for Lokalise Translation Manager Tool (hybrid version with stdlib awareness)
+# run.py - Entry point for Lokalise Translation Manager Tool (refined logging)
 
 import os
 import subprocess
@@ -6,17 +6,14 @@ import sys
 import json
 from pathlib import Path
 
-# Add project root to sys.path
 ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR))
 
-# Standard libraries (for user info)
 standard_libraries = [
     'os', 're', 'csv', 'time', 'threading', 'subprocess',
     'json', 'configparser', 'itertools'
 ]
 
-# Optional external libraries to install if not present
 optional_libraries = [
     'prettytable',
     'colorama',
@@ -26,46 +23,50 @@ optional_libraries = [
 
 def install_package(package):
     try:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to install {package}: {e}")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package],
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL)
+        print(f"✔ Installed missing library: {package}")
+    except subprocess.CalledProcessError:
+        print(f"✘ Failed to install: {package}")
 
 def install_from_requirements():
     requirements_file = Path("requirements.txt")
     if requirements_file.exists():
-        print("\nInstalling dependencies from requirements.txt...\n")
         try:
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)])
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+            print("✔ All dependencies installed from requirements.txt.")
             return True
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to install from requirements.txt: {e}\nFalling back to manual installation.")
-    else:
-        print("requirements.txt not found. Falling back to manual installation.")
+        except subprocess.CalledProcessError:
+            print("✘ Failed to install from requirements.txt. Falling back to manual installation.")
     return False
 
 def check_standard_libraries():
-    print("\nChecking standard Python libraries...")
+    # Optional: Can be silenced or removed entirely
+    missing = []
     for lib in standard_libraries:
         try:
             __import__(lib)
-            print(f"{lib} is available (standard library).")
         except ImportError:
-            print(f"{lib} is missing. Please ensure your Python installation is complete.")
+            missing.append(lib)
+    if missing:
+        print(f"⚠ Missing standard libraries: {', '.join(missing)}")
+    # Otherwise silent
 
 def check_and_install_optional_libraries():
-    print("\nChecking and installing optional libraries...")
+    installed_something = False
     for package in optional_libraries:
         try:
             __import__(package)
-            print(f"{package} is already installed.")
         except ImportError:
-            print(f"{package} is missing. Attempting to install...")
             install_package(package)
+            installed_something = True
+    if not installed_something:
+        print("✔ All optional libraries are already installed.")
 
 def get_user_config():
-    """
-    Prompt user for config (Lokalise + OpenAI) if not already provided
-    """
     config_dir = Path("config")
     config_file = config_dir / "user_config.json"
     config_dir.mkdir(exist_ok=True)
@@ -88,13 +89,15 @@ def get_user_config():
 
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=4)
-        print(f"Configuration saved to {config_file}.")
+        print(f"\n✔ Configuration saved to {config_file}.")
     else:
-        print(f"Configuration already exists at {config_file}.")
+        print(f"✔ Configuration already exists at {config_file}.")
 
 def main():
-    print("\nWelcome to Lokalise Translation Manager Tool 🚀\n")
-    print("Tip: You can also manually run \"pip install -r requirements.txt\" to install all dependencies.\n")
+    print("\n🧩 Starting Lokalise Translation Manager Tool...\n")
+
+    # Optional: show this tip
+    print("💡 Tip: You can run \"pip install -r requirements.txt\" manually to install dependencies.\n")
 
     check_standard_libraries()
     used_requirements = install_from_requirements()
@@ -103,12 +106,11 @@ def main():
 
     get_user_config()
 
-    # STEP: Call core flow logic
     try:
         from lokalise_translation_manager.core import run_tool
         run_tool()
     except Exception as e:
-        print(f"\nError during tool execution: {e}")
+        print(f"\n❌ Error during tool execution: {e}")
 
 if __name__ == "__main__":
     main()
