@@ -7,7 +7,13 @@ import requests
 import zipfile
 import itertools
 import sys
+import threading
 from pathlib import Path
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import select
 
 try:
     from colorama import init, Fore
@@ -32,6 +38,37 @@ def extract_zip(file_path, extract_to):
         zip_ref.extractall(extract_to)
     os.remove(file_path)
     print(f"{Fore.MAGENTA if use_colors else ''}Extraction complete. Deleted {file_path}.")
+
+def prompt_with_timeout(prompt, timeout=10, default='n'):
+    print(f"{prompt} (y/n) [default: {default}] ", end='', flush=True)
+    start_time = time.time()
+
+    if os.name == 'nt':  # Windows
+        input_str = ''
+        while True:
+            if msvcrt.kbhit():
+                char = msvcrt.getche()
+                if char in [b'\r', b'\n']:  # Enter
+                    break
+                elif char == b'\x08':  # Backspace
+                    input_str = input_str[:-1]
+                    print('\b \b', end='', flush=True)
+                else:
+                    input_str += char.decode()
+            if (time.time() - start_time) > timeout:
+                print(f"\nNo input received in {timeout} seconds. Defaulting to '{default}'.")
+                return default
+            time.sleep(0.1)
+        print()  # new line after input
+        return input_str.strip().lower() or default
+    else:  # Unix-like
+        rlist, _, _ = select.select([sys.stdin], [], [], timeout)
+        if rlist:
+            input_str = sys.stdin.readline().strip()
+            return input_str.lower() or default
+        else:
+            print(f"\nNo input received in {timeout} seconds. Defaulting to '{default}'.")
+            return default
 
 def fetch_lokalise_file(project_id, api_key, platform, format, save_dir):
     url = f"https://api.lokalise.com/api2/projects/{project_id}/files/async-download"
@@ -92,8 +129,26 @@ def main():
     project_id = config["lokalise"]["project_id"]
     api_key = config["lokalise"]["api_key"]
 
-    ios_dir = fetch_lokalise_file(project_id, api_key, "iOS", "strings", "lokalise_translation_manager/lokalise_files/ios")
-    android_dir = fetch_lokalise_file(project_id, api_key, "Android", "xml", "lokalise_translation_manager/lokalise_files/android")
+    ios_path = Path("lokalise_translation_manager/lokalise_files/ios")
+    android_path = Path("lokalise_translation_manager/lokalise_files/android")
+
+    ios_exists = ios_path.exists() and any(ios_path.glob("*"))
+    android_exists = android_path.exists() and any(android_path.glob("*"))
+
+    if ios_exists or android_exists:
+        response = prompt_with_timeout("Files already exist. Do you want to re-download them?", timeout=10, default='n')
+        if response != 'y':
+            print(f"{Fore.GREEN if use_colors else ''}Using existing local files.")
+            config["lokalise_paths"] = {
+                "ios": str(ios_path.resolve()),
+                "android": str(android_path.resolve())
+            }
+            with CONFIG_PATH.open('w') as f:
+                json.dump(config, f, indent=4)
+            return
+
+    ios_dir = fetch_lokalise_file(project_id, api_key, "iOS", "strings", str(ios_path))
+    android_dir = fetch_lokalise_file(project_id, api_key, "Android", "xml", str(android_path))
 
     config["lokalise_paths"] = {
         "ios": ios_dir,
@@ -104,6 +159,7 @@ def main():
         json.dump(config, f, indent=4)
 
     print(f"\n{Fore.GREEN if use_colors else ''}All files downloaded and Lokalise paths added to config successfully.")
+
 
 if __name__ == "__main__":
     main()
