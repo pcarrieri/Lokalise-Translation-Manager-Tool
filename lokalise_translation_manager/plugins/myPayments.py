@@ -64,21 +64,33 @@ def filter_translations():
         print_colored(f"ERROR: Failed to process translations - {e}", Fore.RED)
 
 def proceed_with_deletion(softpos_rows, url_rows):
-    print("IMPORTANT: Press any key within 10 seconds to KEEP the filtered keys in the original file...")
+    print("IMPORTANT: Press ENTER key within 10 seconds to KEEP the filtered keys in the original file...")
     print("If no key is pressed, the keys will be DELETED automatically.")
 
-    def wait_for_input():
-        input()
+    try:
+        if os.name == 'nt':  # Windows
+            import msvcrt
+            start_time = time.time()
+            while time.time() - start_time < 10:
+                if msvcrt.kbhit():
+                    msvcrt.getch()
+                    print_colored("Input received. No changes made to the original file.", Fore.GREEN)
+                    return
+                time.sleep(0.1)
+        else:  # Unix / macOS
+            import select
+            print("Press ENTER to cancel deletion...", end='', flush=True)
+            rlist, _, _ = select.select([sys.stdin], [], [], 10)
+            if rlist:
+                sys.stdin.readline()
+                print_colored("\nInput received. No changes made to the original file.", Fore.GREEN)
+                return
+    except Exception as e:
+        print_colored(f"Error while waiting for input: {e}", Fore.RED)
 
-    input_thread = threading.Thread(target=wait_for_input)
-    input_thread.start()
-    input_thread.join(timeout=10)
+    print_colored("\nNo input received. Proceeding to delete the keys.\n", Fore.RED)
+    delete_keys(softpos_rows, url_rows)
 
-    if input_thread.is_alive():
-        print_colored("No input received. Proceeding to delete the keys.", Fore.RED)
-        delete_keys(softpos_rows, url_rows)
-    else:
-        print_colored("Input received. No changes made to the original file.", Fore.GREEN)
 
 def delete_keys(softpos_rows, url_rows):
     try:
