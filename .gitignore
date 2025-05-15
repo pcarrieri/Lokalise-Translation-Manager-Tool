@@ -15,3 +15,4 @@ make_release.sh
 LokaliseTool.bat
 LokaliseTool.command
 lokalise_translation_manager/lokalise_files
+lokalise_translation_manager/plugins
