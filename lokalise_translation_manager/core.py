@@ -1,0 +1,83 @@
+# core.py - Main execution flow of Lokalise Translation Manager Tool
+
+import importlib
+import webbrowser
+
+try:
+    from colorama import Fore, init
+    init(autoreset=True)
+    color_enabled = True
+except ImportError:
+    color_enabled = False
+
+def print_colored(text, color):
+    print(color + text if color_enabled else text)
+
+def open_browser():
+    webbrowser.open('http://localhost:5173')
+
+def run_tool():
+    try:
+        # Step 0: Download Lokalise files
+        print_colored("\nDownloading Lokalise files...", Fore.CYAN)
+        download_module = importlib.import_module("lokalise_translation_manager.download.download_lokalise_files")
+        download_module.main()
+
+        # Step 1: Run iOS scanner
+        print_colored("\nRunning iOS scanner...", Fore.CYAN)
+        ios_scanner = importlib.import_module("lokalise_translation_manager.scanner.ios_scanner")
+        ios_scanner.main()
+
+        # Step 2: Run Android scanner
+        print_colored("\nRunning Android scanner...", Fore.CYAN)
+        android_scanner = importlib.import_module("lokalise_translation_manager.scanner.android_scanner")
+        android_scanner.main()
+
+        # Step 3: Merge translations
+        print_colored("\nMerging iOS and Android missing translations...", Fore.CYAN)
+        merge_module = importlib.import_module("lokalise_translation_manager.utils.merge_translations")
+        merge_module.run_merge()
+
+        # Step 4: Download all Lokalise keys after merge
+        print_colored("\nDownloading all Lokalise keys for final processing...", Fore.CYAN)
+        keys_module = importlib.import_module("lokalise_translation_manager.utils.download_lokalise_keys")
+        keys_module.main()
+
+        # Step 5: Normalize and prepare data for translation
+        print_colored("\nNormalizing data for translation...", Fore.CYAN)
+        normalize_module = importlib.import_module("lokalise_translation_manager.utils.normalize_translations")
+        normalize_module.process_normalization()
+
+        # Step 6: Prepare final file for translation engine
+        print_colored("\nPreparing final file for translation engine...", Fore.CYAN)
+        prepare_module = importlib.import_module("lokalise_translation_manager.utils.prepare_translations")
+        prepare_module.main()
+
+        # Step 7: Perform translation using OpenAI
+        print_colored("\nPerforming translations with OpenAI...", Fore.CYAN)
+        translate_module = importlib.import_module("lokalise_translation_manager.translator.translate_with_openai")
+        translate_module.main()
+
+        # Step 8: Upload translations to Lokalise
+        print_colored("\nUploading translations to Lokalise...", Fore.CYAN)
+        upload_module = importlib.import_module("lokalise_translation_manager.utils.upload_translations")
+        upload_module.main()
+
+        # Step 9: Clean unused keys on Lokalise
+        print_colored("\nListing all unused keys from Lokalise...", Fore.CYAN)
+        cleanup_module = importlib.import_module("lokalise_translation_manager.utils.cleanup_unused_keys")
+        cleanup_module.main()
+
+        print_colored("\n✅ All steps completed.", Fore.GREEN)
+
+        # Step 10: Open browser to show CSV reports
+        print_colored("\nOpening browser for CSV report visualization...", Fore.CYAN)
+        open_browser()
+
+    except ModuleNotFoundError as e:
+        print_colored(f"Error: Missing module - {e}", Fore.RED)
+    except Exception as e:
+        print_colored(f"Unexpected error: {e}", Fore.RED)
+
+if __name__ == "__main__":
+    run_tool()
