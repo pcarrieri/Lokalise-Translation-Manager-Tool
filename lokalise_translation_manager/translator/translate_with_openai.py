@@ -1,69 +1,25 @@
 # lokalise_translation_manager/translator/translate_with_openai.py
 
-import os
 import csv
 import json
 import time
-import itertools
-import sys
-import threading
 from pathlib import Path
 from openai import OpenAI
 import importlib.util
 
-try:
-    from colorama import init, Fore, Style
-    init(autoreset=True)
-    colorama_available = True
-except ImportError:
-    colorama_available = False
-
+# Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 REPORTS_DIR = BASE_DIR / "reports"
-CONFIG_PATH = BASE_DIR / "config" / "user_config.json"
-
-MOCK_FILE = REPORTS_DIR / "ready_to_translations_mock.csv"
-REAL_FILE = REPORTS_DIR / "ready_to_translations.csv"
-INPUT_FILE = MOCK_FILE if MOCK_FILE.exists() else REAL_FILE
+INPUT_FILE = REPORTS_DIR / "ready_to_translations.csv"
 OUTPUT_FILE = REPORTS_DIR / "translation_done.csv"
 PLUGINS_DIR = BASE_DIR / "lokalise_translation_manager" / "plugins"
 
-stop_loader = False
-
-
-def print_colored(text, color=None):
-    if colorama_available and color:
-        print(color + text + Style.RESET_ALL)
-    else:
-        print(text)
-
-
-def loader(key_name, languages, total_translations, completed_translations):
-    start_time = time.time()
-    for c in itertools.cycle(['|', '/', '-', '\\']):
-        if stop_loader:
-            break
-        elapsed = time.time() - start_time
-        percent = (completed_translations / total_translations) * 100
-        sys.stdout.write(
-            f'\rTranslating "{key_name}"... {c} {percent:.2f}% complete. Elapsed: {elapsed:.1f}s')
-        sys.stdout.flush()
-        time.sleep(0.1)
-    print()
-
-
-def get_api_key():
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open() as f:
-            config = json.load(f)
-            return config["openai"]["api_key"]
-    raise FileNotFoundError("OpenAI API key not found in config")
-
-
-def translate_text(client, text, lang, prompt=""):
+def translate_text(client, text, lang, prompt="", socketio=None):
+    """Esegue la traduzione di un singolo testo usando l'API di OpenAI."""
     try:
         instructions = (
-            f"Translate the following text to {lang}, ignoring any URLs. {prompt}"
+            f"Translate the following English text to the language with ISO code '{lang}'. "
+            f"Preserve any HTML tags or placeholders like %s, %d, %@, %1$s, etc., exactly as they are. {prompt}"
         )
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -74,28 +30,26 @@ def translate_text(client, text, lang, prompt=""):
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print_colored(f"ERROR: Translation failed - {e}", Fore.RED)
-        return ""
-
+        if socketio:
+            socketio.emit('detailed_log', {'message': f"ERRORE: La traduzione per '{lang}' è fallita - {e}"})
+        return f"TRANSLATION_ERROR: {text}"
 
 def load_completed_keys():
+    """Carica gli ID delle chiavi già tradotte per poter riprendere il processo."""
     if not OUTPUT_FILE.exists():
         return set()
     with OUTPUT_FILE.open('r', encoding='utf-8') as f:
-        return {row['key_id'] for row in csv.DictReader(f)}
-
-
-def count_done_translations():
-    if not OUTPUT_FILE.exists():
-        return 0
-    with OUTPUT_FILE.open('r', encoding='utf-8') as f:
-        return sum(len(row['languages'].split(',')) for row in csv.DictReader(f))
-
+        try:
+            return {row['key_id'] for row in csv.DictReader(f)}
+        except (csv.Error, KeyError):
+            return set()
 
 def discover_plugins():
+    # ... (funzione invariata)
     prompt_plugins, action_plugins, extension_plugins = [], [], []
     if PLUGINS_DIR.exists():
         for f in PLUGINS_DIR.glob('*.py'):
+            if f.name == '__init__.py': continue
             content = f.read_text()
             if "[PROMPT]" in content:
                 prompt_plugins.append(f.name)
@@ -106,120 +60,136 @@ def discover_plugins():
     return prompt_plugins, action_plugins, extension_plugins
 
 
-def load_prompt_plugins(plugin_names):
+def load_prompt_plugins(plugin_names, socketio):
+    # ... (funzione invariata)
     texts = []
     for name in plugin_names:
         path = PLUGINS_DIR / name
         try:
             content = path.read_text()
             texts.append(content)
-            print_colored(f"Loaded PROMPT plugin: {name}", Fore.YELLOW)
+            socketio.emit('detailed_log', {'message': f'Caricato plugin PROMPT: {name}'})
         except Exception as e:
-            print_colored(f"Failed to load PROMPT plugin {name}: {e}", Fore.RED)
-    return texts
+            socketio.emit('detailed_log', {'message': f'Fallito caricamento plugin PROMPT {name}: {e}'})
+    return " ".join(texts)
 
-
-def run_extension_plugins(plugin_names):
+def run_plugins(plugin_names, plugin_type, socketio):
+    # ... (funzione invariata)
     for name in plugin_names:
         path = PLUGINS_DIR / name
-        print_colored(f"Running EXTENSION plugin: {name}", Fore.MAGENTA)
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if hasattr(module, 'filter_translations'):
-            module.filter_translations()
+        socketio.emit('detailed_log', {'message': f'Esecuzione plugin {plugin_type}: {name}'})
+        try:
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if hasattr(module, 'run'):
+                module.run()
+        except Exception as e:
+            socketio.emit('detailed_log', {'message': f'Fallita esecuzione plugin {name}: {e}'})
 
 
-def run_action_plugins(plugin_names):
-    for name in plugin_names:
-        path = PLUGINS_DIR / name
-        print_colored(f"Running ACTION plugin: {name}", Fore.BLUE)
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if hasattr(module, 'run'):
-            module.run()
+def show_summary(socketio, prompt_plugins, action_plugins, extension_plugins):
+    # ... (funzione invariata)
+    summary = [
+        "\n--- Riepilogo Configurazione OpenAI ---",
+        f"Modello: GPT-4o",
+        f"File di input: {INPUT_FILE.name}",
+        f"File di output: {OUTPUT_FILE.name}",
+        f"Plugin PROMPT ({len(prompt_plugins)}): {', '.join(prompt_plugins) or 'Nessuno'}",
+        f"Plugin ACTION ({len(action_plugins)}): {', '.join(action_plugins) or 'Nessuno'}",
+        f"Plugin EXTENSION ({len(extension_plugins)}): {', '.join(extension_plugins) or 'Nessuno'}"
+    ]
+    socketio.emit('detailed_log', {'message': "\n".join(summary)})
 
 
-def show_summary(prompt_plugins, action_plugins, extension_plugins):
-    print_colored("\n===== OPENAI TRANSLATION SUMMARY =====", Fore.CYAN)
-    print(f"Model: GPT-4o")
-    print(f"Input file: {INPUT_FILE.name}{' (mock)' if INPUT_FILE == MOCK_FILE else ''}")
-    print(f"Output file: {OUTPUT_FILE.name}")
-    print(f"Plugins found: {len(prompt_plugins) + len(action_plugins) + len(extension_plugins)}")
-    print(f" - PROMPT ({len(prompt_plugins)}): {', '.join(prompt_plugins) if prompt_plugins else 'None'}")
-    print(f" - ACTION ({len(action_plugins)}): {', '.join(action_plugins) if action_plugins else 'None'}")
-    print(f" - EXTENSION ({len(extension_plugins)}): {', '.join(extension_plugins) if extension_plugins else 'None'}")
-    print(f"Estimated cost: ~750 tokens per translation")
-    print(f"Plugin directory: {PLUGINS_DIR}\n")
-    if MOCK_FILE.exists():
-        print_colored("⚠️  Using mock file 'ready_to_translations_mock.csv'. Delete it to use the real input.", Fore.YELLOW)
-
-
-def run_translation(api_key):
-    global stop_loader
+def run_translation(api_key, socketio):
     client = OpenAI(api_key=api_key)
     completed_keys = load_completed_keys()
-    done_count = count_done_translations()
 
     prompt_plugins, action_plugins, extension_plugins = discover_plugins()
-    show_summary(prompt_plugins, action_plugins, extension_plugins)
+    show_summary(socketio, prompt_plugins, action_plugins, extension_plugins)
 
-    run_action_plugins(action_plugins)
-    prompt_text = " ".join(load_prompt_plugins(prompt_plugins))
+    run_plugins(action_plugins, "ACTION", socketio)
+    prompt_text = load_prompt_plugins(prompt_plugins, socketio)
+    
+    rows_to_translate = []
+    if INPUT_FILE.exists():
+         with INPUT_FILE.open('r', encoding='utf-8') as infile:
+            reader = csv.DictReader(infile)
+            rows_to_translate = [row for row in reader if row['key_id'] not in completed_keys]
 
-    with INPUT_FILE.open('r', encoding='utf-8') as infile, \
-         OUTPUT_FILE.open('a', newline='', encoding='utf-8') as outfile:
+    if not rows_to_translate:
+        socketio.emit('detailed_log', {'message': "Nessuna nuova chiave da tradurre trovata."})
+        run_plugins(extension_plugins, "EXTENSION", socketio)
+        return
 
-        reader = csv.DictReader(infile)
-        fieldnames = reader.fieldnames + ['translated']
+    total_translations = sum(len(row['languages'].split(',')) for row in rows_to_translate)
+    socketio.emit('detailed_log', {'message': f"Trovate {len(rows_to_translate)} chiavi da tradurre, per un totale di {total_translations} traduzioni."})
+    
+    with OUTPUT_FILE.open('a', newline='', encoding='utf-8') as outfile:
+        fieldnames = rows_to_translate[0].keys() if rows_to_translate else []
+        if 'translated' not in fieldnames:
+             fieldnames = list(fieldnames) + ['translated']
+
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         if outfile.tell() == 0:
             writer.writeheader()
 
-        total = sum(len(r['languages'].split(',')) for r in reader)
-        infile.seek(0)
-        next(reader)
+        start_time = time.time()
+        completed_count = 0
 
-        start = time.time()
-        translated_count = 0
-
-        for row in reader:
-            if row['key_id'] in completed_keys:
-                continue
-
+        for row in rows_to_translate:
             langs = row['languages'].split(',')
             translations = []
-            stop_loader = False
-            thread = threading.Thread(target=loader, args=(row['key_name'], langs, total, done_count))
-            thread.start()
+            
+            socketio.emit('detailed_log', {'message': f"Traduco '{row['key_name']}' in {len(langs)} lingue..."})
 
             for lang in langs:
-                translation = translate_text(client, row['translation'], lang, prompt_text)
+                translation = translate_text(client, row['translation'], lang, prompt_text, socketio)
                 translations.append(translation)
-                done_count += 1
-                translated_count += 1
-
-            stop_loader = True
-            thread.join()
+                completed_count += 1
+                
+                percent = (completed_count / total_translations) * 100 if total_translations > 0 else 0
+                
+                # --- MODIFICA CHIAVE: Invia l'aggiornamento per la barra di avanzamento ---
+                socketio.emit('progress_update', {'percentage': percent})
+                
+                socketio.emit('detailed_log', {'message': f"  > {lang}: completato. ({completed_count}/{total_translations})"})
 
             row['translated'] = '|'.join(translations)
             writer.writerow(row)
 
-    elapsed = time.time() - start
-    print_colored(f"\n✅ Translations saved to {OUTPUT_FILE}", Fore.GREEN)
-    print_colored(f"\n===== TRANSLATION COMPLETE =====", Fore.CYAN)
-    print_colored(f"Total translations performed: {translated_count}", Fore.CYAN)
-    print_colored(f"Elapsed time: {elapsed:.2f} seconds\n", Fore.CYAN)
+    elapsed = time.time() - start_time
+    socketio.emit('detailed_log', {'message': f"\nSalvataggio delle traduzioni completato in {OUTPUT_FILE.name}."})
+    
+    summary_data = {
+        'title': 'Riepilogo Traduzioni OpenAI',
+        'type': 'bar',
+        'data': {
+            'labels': ['Traduzioni Eseguite', 'Tempo (secondi)'],
+            'values': [completed_count, round(elapsed, 2)]
+        }
+    }
+    socketio.emit('summary_data', summary_data)
+    
+    run_plugins(extension_plugins, "EXTENSION", socketio)
 
-    run_extension_plugins(extension_plugins)
-
-
-def main():
-    print_colored("\n🔁 Starting OpenAI Translation...", Fore.CYAN)
-    key = get_api_key()
-    run_translation(key)
-
+def main(config, socketio):
+    api_key = config.get("openai", {}).get("api_key")
+    if not api_key:
+        socketio.emit('detailed_log', {'message': "ERRORE: Chiave API di OpenAI non trovata nella configurazione."})
+        raise ValueError("OpenAI API key not found in config")
+    run_translation(api_key, socketio)
 
 if __name__ == "__main__":
-    main()
+    class MockSocket:
+        def emit(self, event, data):
+            print(f"EMIT: {event} - {data}")
+
+    config_path_test = BASE_DIR / "config" / "user_config.json"
+    if config_path_test.exists():
+        with open(config_path_test) as f:
+            test_config = json.load(f)
+        main(test_config, MockSocket())
+    else:
+        print("config/user_config.json non trovato. Impossibile eseguire il test.")

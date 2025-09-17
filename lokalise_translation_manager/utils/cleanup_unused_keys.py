@@ -1,78 +1,74 @@
-import os
+# lokalise_translation_manager/utils/cleanup_unused_keys.py
+
 import csv
 import json
 import requests
 from pathlib import Path
 
-try:
-    from colorama import init, Fore, Style
-    init(autoreset=True)
-    color_enabled = True
-except ImportError:
-    color_enabled = False
-
-try:
-    from prettytable import PrettyTable
-    table_enabled = True
-except ImportError:
-    table_enabled = False
-
+# Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 REPORTS_DIR = BASE_DIR / "reports"
-CONFIG_FILE = BASE_DIR / "config" / "user_config.json"
-
 IOS_KEYS_FILE = REPORTS_DIR / "ios" / "total_keys_used_ios.csv"
 ANDROID_KEYS_FILE = REPORTS_DIR / "android" / "total_keys_used_android.csv"
 LOKALISE_KEYS_FILE = REPORTS_DIR / "lokalise_keys.csv"
 TOTAL_KEYS_FILE = REPORTS_DIR / "total_keys_used_by_both.csv"
 READY_TO_BE_DELETED_FILE = REPORTS_DIR / "ready_to_be_deleted.csv"
 
-def print_colored(text, color=None):
-    if color_enabled and color:
-        print(color + text + Style.RESET_ALL)
-    else:
-        print(text)
 
 def load_keys(file_path):
+    """Carica le chiavi da un file CSV (prima colonna)."""
     keys = set()
     if file_path.exists():
         with file_path.open('r', encoding='utf-8') as file:
             reader = csv.reader(file)
+            header = next(reader, None)
             for row in reader:
-                keys.add(row[0].strip())
+                if row:
+                    keys.add(row[0].strip())
     return keys
 
-def merge_keys():
+def merge_keys(socketio):
+    """Unisce le chiavi usate da iOS e Android in un unico file."""
     ios_keys = load_keys(IOS_KEYS_FILE)
     android_keys = load_keys(ANDROID_KEYS_FILE)
+    
+    socketio.emit('detailed_log', {'message': f'Trovate {len(ios_keys)} chiavi in uso su iOS e {len(android_keys)} su Android.'})
 
     if not ios_keys and not android_keys:
-        print_colored("ERROR: No keys found in either iOS or Android report.", Fore.RED)
+        socketio.emit('detailed_log', {'message': 'ERRORE: Nessuna chiave trovata nei report. Impossibile continuare.'})
         return False
 
     total_keys = ios_keys.union(android_keys)
 
     with TOTAL_KEYS_FILE.open('w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
+        writer.writerow(['key_name'])
         for key in sorted(total_keys):
             writer.writerow([key])
 
-    print_colored(f"Merged total keys saved to: {TOTAL_KEYS_FILE}", Fore.CYAN)
+    socketio.emit('detailed_log', {'message': f'Trovate {len(total_keys)} chiavi totali in uso.'})
     return True
 
-def filter_lokalise_keys():
-    total_keys = load_keys(TOTAL_KEYS_FILE)
+def filter_lokalise_keys(socketio):
+    """Filtra le chiavi di Lokalise per trovare quelle non utilizzate."""
+    total_keys_in_use = load_keys(TOTAL_KEYS_FILE)
     lokalise_keys = {}
+
+    if not LOKALISE_KEYS_FILE.exists():
+        socketio.emit('detailed_log', {'message': f'ERRORE: File {LOKALISE_KEYS_FILE.name} non trovato.'})
+        return []
 
     with LOKALISE_KEYS_FILE.open('r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
         for row in reader:
             lokalise_keys[row['key_name']] = row['key_id']
-
+    
+    socketio.emit('detailed_log', {'message': f'Confronto delle {len(total_keys_in_use)} chiavi locali con le {len(lokalise_keys)} chiavi su Lokalise.'})
+    
     unused_keys = [
         (key_id, key_name)
         for key_name, key_id in lokalise_keys.items()
-        if key_name not in total_keys
+        if key_name not in total_keys_in_use
     ]
 
     with READY_TO_BE_DELETED_FILE.open('w', newline='', encoding='utf-8') as file:
@@ -81,71 +77,71 @@ def filter_lokalise_keys():
         for key_id, key_name in unused_keys:
             writer.writerow([key_id, key_name])
 
-    print_colored(f"{len(unused_keys)} unused keys saved to: {READY_TO_BE_DELETED_FILE}", Fore.YELLOW)
+    socketio.emit('detailed_log', {'message': f'Trovate {len(unused_keys)} chiavi non utilizzate. Report salvato in: {READY_TO_BE_DELETED_FILE.name}'})
     return unused_keys
 
-def delete_keys_from_lokalise(keys_to_delete):
-    with CONFIG_FILE.open() as f:
-        config = json.load(f)
-
+def delete_keys_from_lokalise(keys_to_delete, config, socketio):
+    """
+    Funzione dedicata alla cancellazione delle chiavi, chiamata solo dopo conferma dell'utente.
+    """
     project_id = config.get("lokalise", {}).get("project_id")
     api_key = config.get("lokalise", {}).get("api_key")
 
     if not project_id or not api_key:
-        print_colored("ERROR: Missing Lokalise credentials in user_config.json", Fore.RED)
+        socketio.emit('detailed_log', {'message': "ERRORE: Credenziali Lokalise mancanti in user_config.json"})
         return
 
+    socketio.emit('detailed_log', {'message': f"Invio richiesta di cancellazione per {len(keys_to_delete)} chiavi a Lokalise..."})
+    
     url = f"https://api.lokalise.com/api2/projects/{project_id}/keys"
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "X-Api-Token": api_key
-    }
-    payload = {"keys": [key_id for key_id, _ in keys_to_delete]}
+    headers = {"accept": "application/json", "content-type": "application/json", "X-Api-Token": api_key}
+    
+    key_ids = [key_info['key_id'] for key_info in keys_to_delete]
+    payload = {"keys": key_ids}
 
-    response = requests.delete(url, json=payload, headers=headers)
+    try:
+        response = requests.delete(url, json=payload, headers=headers)
+        response.raise_for_status() # Lancia un'eccezione per status code 4xx/5xx
+        socketio.emit('detailed_log', {'message': "✅ Chiavi cancellate con successo da Lokalise."})
+    except requests.exceptions.RequestException as e:
+        socketio.emit('detailed_log', {'message': f"ERRORE: Fallita la cancellazione delle chiavi. Dettagli: {e.response.text if e.response else e}"})
 
-    if response.status_code == 200:
-        print_colored("✅ Keys successfully deleted from Lokalise.", Fore.GREEN)
-    else:
-        print_colored(f"ERROR: Failed to delete keys. Status code: {response.status_code}", Fore.RED)
-        print_colored(response.text, Fore.RED)
 
-def main():
-    print_colored("\n📦 CLEANUP UNUSED LOKALISE KEYS\n", Fore.MAGENTA)
+def main(config, socketio):
+    """
+    Funzione di analisi: trova le chiavi inutilizzate e le restituisce.
+    Non esegue la cancellazione.
+    """
+    if not merge_keys(socketio):
+        return []
 
-    if not merge_keys():
-        return
-
-    keys_to_delete = filter_lokalise_keys()
+    keys_to_delete = filter_lokalise_keys(socketio)
 
     if not keys_to_delete:
-        print_colored("🎉 No unused keys found. Your Lokalise project is clean!", Fore.GREEN)
-        return
-
-    print_colored(f"\nFound {len(keys_to_delete)} keys that are NOT used in your iOS/Android projects.", Fore.YELLOW)
-
-    if table_enabled:
-        table = PrettyTable()
-        table.field_names = ["Key ID", "Key Name"]
-        for key_id, key_name in keys_to_delete:
-            table.add_row([key_id, key_name])
-        print(table)
-    else:
-        for key_id, key_name in keys_to_delete:
-            print(f"Key ID: {key_id} | Key Name: {key_name}")
-
-    print_colored("\n⚠️ WARNING: These keys will be permanently removed from your Lokalise project.", Fore.RED)
-    print_colored("⚠️ This action is NOT reversible from this tool. Manual recovery from Lokalise UI may be required.\n", Fore.RED)
-
-    user_input = input("👉 Do you want to proceed with deleting these unused keys from Lokalise? (y/n): ").strip().lower()
-
-    if user_input == 'y':
-        delete_keys_from_lokalise(keys_to_delete)
-    else:
-        print_colored("❌ Deletion aborted by user. No keys were deleted.", Fore.YELLOW)
-
-    print_colored(f"\n📝 A list of deletable keys is saved in: {READY_TO_BE_DELETED_FILE}", Fore.CYAN)
+        socketio.emit('detailed_log', {'message': '🎉 Nessuna chiave inutilizzata trovata.'})
+        return []
+    
+    # Converte la lista di tuple in una lista di dizionari per inviarla al frontend
+    keys_as_dicts = [{'key_id': kid, 'key_name': kname} for kid, kname in keys_to_delete]
+    
+    return keys_as_dicts
 
 if __name__ == "__main__":
-    main()
+    class MockSocket:
+        def emit(self, event, data):
+            print(f"EMIT: {event} - {data}")
+
+    config_path_test = BASE_DIR / "config" / "user_config.json"
+    if config_path_test.exists():
+        with open(config_path_test) as f:
+            test_config = json.load(f)
+        
+        # Test della funzione di analisi
+        found_keys = main(test_config, MockSocket())
+        print(f"\nFunzione di analisi ha trovato {len(found_keys)} chiavi da cancellare.")
+        
+        # Test della funzione di cancellazione (da usare con cautela)
+        # if found_keys and input("Vuoi testare la cancellazione? (y/n): ") == 'y':
+        #    delete_keys_from_lokalise(found_keys, test_config, MockSocket())
+    else:
+        print("config/user_config.json non trovato. Impossibile eseguire il test.")
