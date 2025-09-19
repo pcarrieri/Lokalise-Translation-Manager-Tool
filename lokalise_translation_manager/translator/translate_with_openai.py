@@ -1,14 +1,10 @@
-# lokalise_translation_manager/translator/translate_with_openai.py
-
 import os
 import csv
 import json
 import time
-import itertools
 import sys
-import threading
 from pathlib import Path
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, RateLimitError, APITimeoutError, APIStatusError
 import importlib.util
 
 try:
@@ -28,29 +24,25 @@ INPUT_FILE = MOCK_FILE if MOCK_FILE.exists() else REAL_FILE
 OUTPUT_FILE = REPORTS_DIR / "translation_done.csv"
 PLUGINS_DIR = BASE_DIR / "lokalise_translation_manager" / "plugins"
 
-stop_loader = False
+# --- CONFIGURAZIONE AVANZATA ---
+MAX_RETRIES = 5
+INITIAL_DELAY_SECONDS = 5
+OPENAI_MODEL = "gpt-4o-mini" # Modello consigliato per performance/costi
 
+# Mapping dei codici lingua ai nomi completi per un prompt migliore
+LANGUAGE_NAMES = {
+    "en": "English", "de": "German", "fr": "French", "it": "Italian", "pl": "Polish",
+    "sv": "Swedish", "nb": "Norwegian (Bokmål)", "da": "Danish", "fi": "Finnish",
+    "lt_LT": "Lithuanian", "lv_LV": "Latvian", "et_EE": "Estonian",
+    "tr_TR": "Turkish", "ar": "Arabic"
+}
+# --------------------------------
 
 def print_colored(text, color=None):
     if colorama_available and color:
         print(color + text + Style.RESET_ALL)
     else:
         print(text)
-
-
-def loader(key_name, languages, total_translations, completed_translations):
-    start_time = time.time()
-    for c in itertools.cycle(['|', '/', '-', '\\']):
-        if stop_loader:
-            break
-        elapsed = time.time() - start_time
-        percent = (completed_translations / total_translations) * 100
-        sys.stdout.write(
-            f'\rTranslating "{key_name}"... {c} {percent:.2f}% complete. Elapsed: {elapsed:.1f}s')
-        sys.stdout.flush()
-        time.sleep(0.1)
-    print()
-
 
 def get_api_key():
     if CONFIG_PATH.exists():
@@ -59,167 +51,206 @@ def get_api_key():
             return config["openai"]["api_key"]
     raise FileNotFoundError("OpenAI API key not found in config")
 
+def translate_text(client, text, lang_code, prompt_addons=""):
+    """
+    Esegue la traduzione con un prompt robusto e un meccanismo di retry.
+    """
+    lang_name = LANGUAGE_NAMES.get(lang_code, lang_code)
+    system_prompt = f"""You are a professional software localization expert. Your task is to translate the given English text for an application's user interface.
 
-def translate_text(client, text, lang, prompt=""):
-    try:
-        instructions = (
-            f"Translate the following text to {lang}, ignoring any URLs. {prompt}"
-        )
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": instructions},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print_colored(f"ERROR: Translation failed - {e}", Fore.RED)
-        return ""
+**Instructions:**
+1. Translate the following text into **{lang_name}** (language code: `{lang_code}`).
+2. **Output ONLY the translated string.** Do not include explanations, introductions, quotes, or any other text.
+3. **Preserve placeholders** (like `{{variable}}`, `%s`, `%d`) exactly as they appear in the original text. Do not translate them.
+4. Maintain a neutral and clear tone suitable for software.
+5. Ignore any URLs found in the text.
+{prompt_addons}"""
 
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": text}
+    ]
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.2, # Un valore basso per traduzioni più consistenti
+                timeout=90
+            )
+            return response.choices[0].message.content.strip()
+        except (APIConnectionError, RateLimitError, APITimeoutError, APIStatusError) as e:
+            print_colored(f"  API ERROR: {type(e).__name__}", Fore.RED)
+            if attempt < MAX_RETRIES - 1:
+                delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
+                print_colored(f"    -> Retrying in {delay}s... (Attempt {attempt + 2}/{MAX_RETRIES})", Fore.YELLOW)
+                time.sleep(delay)
+            else:
+                print_colored(f"    -> FAILED after {MAX_RETRIES} attempts. Skipping.", Fore.RED)
+                return ""
+        except Exception as e:
+            print_colored(f"  UNEXPECTED ERROR: {e}", Fore.RED)
+            return ""
+    return ""
 
 def load_completed_keys():
     if not OUTPUT_FILE.exists():
         return set()
     with OUTPUT_FILE.open('r', encoding='utf-8') as f:
-        return {row['key_id'] for row in csv.DictReader(f)}
+        try:
+            return {row['key_id'] for row in csv.DictReader(f)}
+        except (csv.Error, KeyError):
+             print_colored(f"WARNING: Could not parse {OUTPUT_FILE.name}. Starting fresh.", Fore.YELLOW)
+             return set()
 
-
-def count_done_translations():
-    if not OUTPUT_FILE.exists():
-        return 0
-    with OUTPUT_FILE.open('r', encoding='utf-8') as f:
-        return sum(len(row['languages'].split(',')) for row in csv.DictReader(f))
-
-
+# --- Funzioni per i plugin (invariate) ---
 def discover_plugins():
     prompt_plugins, action_plugins, extension_plugins = [], [], []
     if PLUGINS_DIR.exists():
         for f in PLUGINS_DIR.glob('*.py'):
             content = f.read_text()
-            if "[PROMPT]" in content:
-                prompt_plugins.append(f.name)
-            if "[ACTION]" in content:
-                action_plugins.append(f.name)
-            if "[EXTENSION]" in content:
-                extension_plugins.append(f.name)
+            if "[PROMPT]" in content: prompt_plugins.append(f.name)
+            if "[ACTION]" in content: action_plugins.append(f.name)
+            if "[EXTENSION]" in content: extension_plugins.append(f.name)
     return prompt_plugins, action_plugins, extension_plugins
-
 
 def load_prompt_plugins(plugin_names):
     texts = []
     for name in plugin_names:
-        path = PLUGINS_DIR / name
         try:
-            content = path.read_text()
+            content = (PLUGINS_DIR / name).read_text()
             texts.append(content)
             print_colored(f"Loaded PROMPT plugin: {name}", Fore.YELLOW)
         except Exception as e:
             print_colored(f"Failed to load PROMPT plugin {name}: {e}", Fore.RED)
-    return texts
+    return " ".join(texts)
 
-
-def run_extension_plugins(plugin_names):
+def run_plugins(plugin_names, plugin_type):
     for name in plugin_names:
         path = PLUGINS_DIR / name
-        print_colored(f"Running EXTENSION plugin: {name}", Fore.MAGENTA)
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if hasattr(module, 'filter_translations'):
-            module.filter_translations()
-
-
-def run_action_plugins(plugin_names):
-    for name in plugin_names:
-        path = PLUGINS_DIR / name
-        print_colored(f"Running ACTION plugin: {name}", Fore.BLUE)
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if hasattr(module, 'run'):
-            module.run()
-
+        print_colored(f"Running {plugin_type} plugin: {name}", Fore.BLUE)
+        try:
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if plugin_type == "ACTION" and hasattr(module, 'run'):
+                module.run()
+            elif plugin_type == "EXTENSION" and hasattr(module, 'filter_translations'):
+                module.filter_translations()
+        except Exception as e:
+            print_colored(f"Failed to run plugin {name}: {e}", Fore.RED)
 
 def show_summary(prompt_plugins, action_plugins, extension_plugins):
     print_colored("\n===== OPENAI TRANSLATION SUMMARY =====", Fore.CYAN)
-    print(f"Model: GPT-4o")
+    print(f"Model: {OPENAI_MODEL}")
     print(f"Input file: {INPUT_FILE.name}{' (mock)' if INPUT_FILE == MOCK_FILE else ''}")
     print(f"Output file: {OUTPUT_FILE.name}")
     print(f"Plugins found: {len(prompt_plugins) + len(action_plugins) + len(extension_plugins)}")
     print(f" - PROMPT ({len(prompt_plugins)}): {', '.join(prompt_plugins) if prompt_plugins else 'None'}")
     print(f" - ACTION ({len(action_plugins)}): {', '.join(action_plugins) if action_plugins else 'None'}")
     print(f" - EXTENSION ({len(extension_plugins)}): {', '.join(extension_plugins) if extension_plugins else 'None'}")
-    print(f"Estimated cost: ~750 tokens per translation")
-    print(f"Plugin directory: {PLUGINS_DIR}\n")
     if MOCK_FILE.exists():
         print_colored("⚠️  Using mock file 'ready_to_translations_mock.csv'. Delete it to use the real input.", Fore.YELLOW)
-
+    print("-" * 40)
 
 def run_translation(api_key):
-    global stop_loader
     client = OpenAI(api_key=api_key)
     completed_keys = load_completed_keys()
-    done_count = count_done_translations()
-
+    
     prompt_plugins, action_plugins, extension_plugins = discover_plugins()
     show_summary(prompt_plugins, action_plugins, extension_plugins)
 
-    run_action_plugins(action_plugins)
-    prompt_text = " ".join(load_prompt_plugins(prompt_plugins))
+    run_plugins(action_plugins, "ACTION")
+    prompt_addons = load_prompt_plugins(prompt_plugins)
+    
+    if not INPUT_FILE.exists():
+        print_colored(f"ERROR: Input file not found at {INPUT_FILE}", Fore.RED)
+        return
+        
+    with INPUT_FILE.open('r', encoding='utf-8') as infile:
+         all_rows = [row for row in csv.DictReader(infile)]
 
-    with INPUT_FILE.open('r', encoding='utf-8') as infile, \
-         OUTPUT_FILE.open('a', newline='', encoding='utf-8') as outfile:
+    if not all_rows:
+        print_colored("INFO: Input file is empty. Nothing to translate.", Fore.YELLOW)
+        return
 
-        reader = csv.DictReader(infile)
-        fieldnames = reader.fieldnames + ['translated']
+    rows_to_translate = [row for row in all_rows if row['key_id'] not in completed_keys]
+    total_keys_to_translate = len(rows_to_translate)
+    
+    if total_keys_to_translate == 0:
+        print_colored("\nAll translations are already complete!", Fore.GREEN)
+        return
+
+    print_colored(f"\nFound {total_keys_to_translate} new keys to translate.", Fore.CYAN)
+    start_time = time.time()
+    translated_in_session = 0
+
+    with OUTPUT_FILE.open('a', newline='', encoding='utf-8') as outfile:
+        # La struttura del CSV di output è derivata dall'input + la nuova colonna 'translated'
+        # Questo corrisponde a: key_name,key_id,languages,translation_id,translation,translated
+        fieldnames = list(all_rows[0].keys()) + ['translated']
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         if outfile.tell() == 0:
             writer.writeheader()
 
-        total = sum(len(r['languages'].split(',')) for r in reader)
-        infile.seek(0)
-        next(reader)
-
-        start = time.time()
-        translated_count = 0
-
-        for row in reader:
-            if row['key_id'] in completed_keys:
+        for index, row in enumerate(rows_to_translate):
+            key_name = row.get('key_name', 'N/A')
+            
+            # --- NUOVO: Validazione delle colonne essenziali per ogni riga ---
+            required_cols = ['key_id', 'translation', 'languages']
+            if not all(col in row for col in required_cols):
+                print_colored(f'\nERROR: Skipping key "{key_name}" ({index + 1}/{total_keys_to_translate}) due to missing required columns.', Fore.RED)
                 continue
-
-            langs = row['languages'].split(',')
+            
+            print_colored(f'\nTranslating key "{key_name}" ({index + 1}/{total_keys_to_translate})...', Fore.WHITE)
+            
+            langs = [lang.strip() for lang in row['languages'].split(',') if lang.strip()]
             translations = []
-            stop_loader = False
-            thread = threading.Thread(target=loader, args=(row['key_name'], langs, total, done_count))
-            thread.start()
 
-            for lang in langs:
-                translation = translate_text(client, row['translation'], lang, prompt_text)
-                translations.append(translation)
-                done_count += 1
-                translated_count += 1
+            # --- NUOVO: Gestione delle stringhe di traduzione vuote ---
+            source_text = row.get('translation', '').strip()
+            if not source_text:
+                print_colored("  -> Source text is empty. Skipping API calls.", Fore.YELLOW)
+                translations = [""] * len(langs) # Crea placeholder vuoti
+            else:
+                for lang_code in langs:
+                    lang_name = LANGUAGE_NAMES.get(lang_code, lang_code)
+                    print(f"  -> Translating to {lang_name} ({lang_code})... ", end="", flush=True)
+                    
+                    translation = translate_text(client, source_text, lang_code, prompt_addons)
+                    
+                    if translation:
+                        print_colored("DONE", Fore.GREEN)
+                        translations.append(translation)
+                        translated_in_session += 1
+                    else:
+                        print_colored("FAILED", Fore.RED)
+                        translations.append("") # Aggiungi placeholder per fallimenti
 
-            stop_loader = True
-            thread.join()
+            # Scrive nel file CSV solo se ci sono traduzioni o se la sorgente era vuota (per marcare come completato)
+            row_to_write = row.copy()
+            row_to_write['translated'] = '|'.join(translations)
+            writer.writerow(row_to_write)
+            outfile.flush()
 
-            row['translated'] = '|'.join(translations)
-            writer.writerow(row)
-
-    elapsed = time.time() - start
-    print_colored(f"\n✅ Translations saved to {OUTPUT_FILE}", Fore.GREEN)
-    print_colored(f"\n===== TRANSLATION COMPLETE =====", Fore.CYAN)
-    print_colored(f"Total translations performed: {translated_count}", Fore.CYAN)
+    elapsed = time.time() - start_time
+    print_colored(f"\n✅ All tasks complete. Results saved to {OUTPUT_FILE}", Fore.GREEN)
+    print_colored("\n===== TRANSLATION COMPLETE =====", Fore.CYAN)
+    print_colored(f"Total translations performed in this session: {translated_in_session}", Fore.CYAN)
     print_colored(f"Elapsed time: {elapsed:.2f} seconds\n", Fore.CYAN)
 
-    run_extension_plugins(extension_plugins)
-
+    run_plugins(extension_plugins, "EXTENSION")
 
 def main():
-    print_colored("\n🔁 Starting OpenAI Translation...", Fore.CYAN)
-    key = get_api_key()
-    run_translation(key)
-
+    try:
+        print_colored("\n🔁 Starting OpenAI Translation...", Fore.CYAN)
+        key = get_api_key()
+        run_translation(key)
+    except FileNotFoundError as e:
+        print_colored(f"\nERROR: Configuration file not found. {e}", Fore.RED)
+    except Exception as e:
+        print_colored(f"\nFATAL ERROR: An unexpected error stopped the script: {e}", Fore.RED)
 
 if __name__ == "__main__":
     main()
