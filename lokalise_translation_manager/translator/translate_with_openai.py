@@ -135,11 +135,17 @@ def run_plugins(plugin_names, plugin_type):
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             if plugin_type == "ACTION" and hasattr(module, 'run'):
-                module.run()
+                # Cattura il risultato della funzione run() del plugin
+                result = module.run()
+                if result is True:
+                    # Se il plugin restituisce True, propaga il segnale di bypass
+                    return True
             elif plugin_type == "EXTENSION" and hasattr(module, 'filter_translations'):
                 module.filter_translations()
         except Exception as e:
             print_colored(f"Failed to run plugin {name}: {e}", Fore.RED)
+    # Se nessun plugin ha segnalato il bypass, ritorna False
+    return False
 
 def show_summary(prompt_plugins, action_plugins, extension_plugins):
     print_colored("\n===== OPENAI TRANSLATION SUMMARY =====", Fore.CYAN)
@@ -163,7 +169,14 @@ def run_translation(api_key):
 
     run_plugins(action_plugins, "ACTION")
     prompt_addons = load_prompt_plugins(prompt_plugins)
-    
+
+    # MODIFICATO: Controlla il risultato dell'esecuzione dei plugin ACTION
+    should_bypass = run_plugins(action_plugins, "ACTION")
+    if should_bypass:
+        # Se un plugin ha segnalato il bypass, termina questa funzione
+        # e permetti a core.py di continuare.
+        return
+
     if not INPUT_FILE.exists():
         print_colored(f"ERROR: Input file not found at {INPUT_FILE}", Fore.RED)
         return

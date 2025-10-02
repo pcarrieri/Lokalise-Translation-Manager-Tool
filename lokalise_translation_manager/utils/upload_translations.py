@@ -54,7 +54,18 @@ def update_translations():
             return
 
         with TRANSLATION_DONE_FILE.open('r', encoding='utf-8') as infile:
-            reader = list(csv.DictReader(infile))
+            # --- NUOVO: Rilevamento del delimitatore più robusto basato sull'header ---
+            header = infile.readline().strip()
+            infile.seek(0)  # Torna all'inizio del file
+
+            delimiter = ','  # Imposta la virgola come default
+            if ';' in header:
+                delimiter = ';'  # Se trovi un punto e virgola nell'header, usalo
+            
+            print_colored(f"INFO: Using detected CSV delimiter: '{delimiter}'", Fore.YELLOW)
+            
+            reader = list(csv.DictReader(infile, delimiter=delimiter))
+            # --- Fine della modifica ---
 
         if not reader:
             print_colored(f"INFO: Input file '{TRANSLATION_DONE_FILE.name}' is empty. Nothing to upload.", Fore.YELLOW)
@@ -69,19 +80,17 @@ def update_translations():
             translation_ids = row['translation_id'].split(',')
             translations = row['translated'].split('|')
 
-            # --- NUOVO: Controllo di integrità dei dati per ogni riga ---
             if not (len(languages) == len(translation_ids) == len(translations)):
                 print_colored(f"\nFATAL DATA MISMATCH for key '{key_name}' ({key_id}). Skipping this row.", Fore.RED)
                 print_colored(f"  - Found: {len(languages)} languages, {len(translation_ids)} IDs, {len(translations)} translations.", Fore.RED)
-                failure_count += len(languages) # Considera tutte le lingue fallite per questa chiave
-                continue # Salta alla prossima riga
+                failure_count += len(languages)
+                continue
 
             for lang, trans_id, translation in zip(languages, translation_ids, translations):
                 lang = lang.strip()
                 trans_id = trans_id.strip()
                 translation = translation.strip()
 
-                # --- NUOVO: Controllo per ID vuoto ---
                 if not trans_id:
                     print_colored(f"Skipping update for '{key_name}' in '{lang}' because its Translation ID is missing.", Fore.YELLOW)
                     failure_count += 1
@@ -118,7 +127,6 @@ def update_translations():
                         'translation_id': trans_id, 'new_translation': translation, 'status_code': response.status_code
                     })
 
-        # Scrittura dei report (con controlli di sicurezza)
         if report_data:
             with FINAL_REPORT_FILE.open('w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=report_data[0].keys())
@@ -133,7 +141,6 @@ def update_translations():
                 writer.writerows(failed_data)
             print_colored(f"\nSome translations failed. See: {FAILED_UPDATE_FILE}", Fore.RED)
 
-        # Riepilogo finale
         print_colored("\n===== UPLOAD SUMMARY =====", Fore.MAGENTA)
         summary = [
             ["Total API Requests", request_count],
