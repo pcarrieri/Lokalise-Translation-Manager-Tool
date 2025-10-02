@@ -44,17 +44,23 @@ def spinner():
 def extract_localized_strings(directory):
     localized_strings = set()
     file_analysis = {}
-    pattern = re.compile(r'R\.string\.([a-zA-Z0-9_]+)')
+    pattern_code = re.compile(r'R\.string\.([a-zA-Z0-9_]+)')
+    pattern_xml = re.compile(r'@string/([a-zA-Z0-9_]+)')
 
     for root, _, files in os.walk(directory):
         for file in files:
-            if file.endswith('.kt') or file.endswith('.java'):
+            if file.endswith(('.kt', '.java', '.xml')):
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, directory)
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                        matches = pattern.findall(content)
+                        matches = []
+                        if file.endswith(('.kt', '.java')):
+                            matches = pattern_code.findall(content)
+                        elif file.endswith('.xml'):
+                            matches = pattern_xml.findall(content)
+                        
                         localized_strings.update(matches)
                         file_analysis[relative_path] = len(matches)
                 except Exception as e:
@@ -95,6 +101,19 @@ def load_strings_file(file_path):
         print_colored(f"Error reading {file_path}: {e}", Fore.RED)
     return strings
 
+def load_all_strings_for_locale(locale_dir):
+    """
+    Carica e unisce le stringhe da 'strings.xml' e 'Localizable.xml'
+    da una specifica cartella di lingua (es. 'values' o 'values-fr').
+    """
+    merged_strings = {}
+    for filename in ["strings.xml", "Localizable.xml"]:
+        file_path = os.path.join(locale_dir, filename)
+        if os.path.exists(file_path):
+            strings_from_file = load_strings_file(file_path)
+            merged_strings.update(strings_from_file)
+    return merged_strings
+
 def load_excluded_locales():
     excluded_locales = set()
     if EXCLUDED_LOCALES_PATH.exists():
@@ -111,13 +130,14 @@ def compare_translations(values_dir, project_dir, keys_to_check):
 
     missing_translations = {}
     excluded_locales = load_excluded_locales()
-    en_path = os.path.join(values_dir, 'values', 'strings.xml')
-    en_strings = load_strings_file(en_path)
+    
+    en_dir = os.path.join(values_dir, 'values')
+    en_strings = load_all_strings_for_locale(en_dir)
 
     supported_languages = set()
     for root, dirs, _ in os.walk(project_dir):
         for dir_name in dirs:
-            if dir_name.startswith('values-') and os.path.isfile(os.path.join(root, dir_name, 'strings.xml')):
+            if dir_name.startswith('values-') and (os.path.isfile(os.path.join(root, dir_name, 'strings.xml')) or os.path.isfile(os.path.join(root, dir_name, 'Localizable.xml'))):
                 supported_languages.add(dir_name.split('-')[1])
 
     for root, dirs, _ in os.walk(values_dir):
@@ -127,8 +147,8 @@ def compare_translations(values_dir, project_dir, keys_to_check):
                 if lang_code in excluded_locales:
                     continue
                 if lang_code in supported_languages:
-                    lang_path = os.path.join(root, dir_name, 'strings.xml')
-                    lang_strings = load_strings_file(lang_path)
+                    lang_dir = os.path.join(root, dir_name)
+                    lang_strings = load_all_strings_for_locale(lang_dir)
 
                     for key in keys_to_check:
                         if key in en_strings and (key not in lang_strings or not lang_strings[key]):
@@ -186,8 +206,8 @@ def main():
         summary_table.add_row(["Total keys used by the project", len(localized_keys)])
         summary_table.add_row(["Keys with missing translations", len(missing_translations)])
         summary_table.add_row(["Execution time (ms)", execution_time_ms])
-        summary_table.add_row(["Total .kt/.java files analyzed", total_files])
-        summary_table.add_row([".kt/.java files with at least one key", files_with_keys])
+        summary_table.add_row(["Total .kt/.java/.xml files analyzed", total_files])
+        summary_table.add_row([".kt/.java/.xml files with at least one key", files_with_keys])
         print_colored(summary_table.get_string(), Fore.CYAN)
     else:
         print_colored(f"\n--- Summary ---\n"
