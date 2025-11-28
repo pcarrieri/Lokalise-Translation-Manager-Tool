@@ -4,6 +4,7 @@ import csv
 import time
 import sys
 from pathlib import Path
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -25,7 +26,7 @@ LOKALISE_LANGUAGES = {
     "en": "en", "de": "de", "fr": "fr", "it": "it", "pl": "pl",
     "sv": "sv", "nb": "nb", "da": "da", "fi": "fi",
     "lt": "lt_LT", "lv": "lv_LV", "et": "et_EE",
-    "tr": "tr_TR", "ar": "ar"
+    "tr": "tr_TR", "ar": "ar", "el": "el"
 }
 
 def print_colored(text, color=None):
@@ -65,16 +66,20 @@ def process_normalization():
         print_colored(f"-> Reading keys needing translation from '{MERGED_RESULT_FILE.name}'...", Fore.BLUE)
         if not MERGED_RESULT_FILE.exists():
             raise FileNotFoundError(f"Input file not found: {MERGED_RESULT_FILE}")
+
+        delimiter_merged = detect_csv_delimiter(MERGED_RESULT_FILE)
         with MERGED_RESULT_FILE.open('r', encoding='utf-8') as merged_file:
-            merged_reader = csv.DictReader(merged_file)
+            merged_reader = csv.DictReader(merged_file, delimiter=delimiter_merged)
             merged_data = {row['key_id']: row for row in merged_reader}
         print_colored(f"   Found {len(merged_data)} total keys.", Fore.BLUE)
 
         print_colored(f"-> Reading available English translations from '{EN_TRANSLATIONS_FILE.name}'...", Fore.BLUE)
         if not EN_TRANSLATIONS_FILE.exists():
             raise FileNotFoundError(f"English translations file not found: {EN_TRANSLATIONS_FILE}")
+
+        delimiter_en = detect_csv_delimiter(EN_TRANSLATIONS_FILE)
         with EN_TRANSLATIONS_FILE.open('r', encoding='utf-8') as en_file:
-            en_reader = csv.DictReader(en_file)
+            en_reader = csv.DictReader(en_file, delimiter=delimiter_en)
             en_data = {row['key_id']: row for row in en_reader}
         print_colored(f"   Found {len(en_data)} English translations.", Fore.BLUE)
         

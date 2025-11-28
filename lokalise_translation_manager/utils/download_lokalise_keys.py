@@ -7,6 +7,7 @@ import csv
 import time
 import sys
 from pathlib import Path
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -135,15 +136,17 @@ def save_keys_to_csv(keys):
 def merge_keys_with_missing_translations():
     try:
         keys_dict = {}
+        delimiter_keys = detect_csv_delimiter(CSV_FILE)
         with CSV_FILE.open('r') as csvfile:
-            reader = csv.DictReader(csvfile)
+            reader = csv.DictReader(csvfile, delimiter=delimiter_keys)
             for row in reader:
                 keys_dict[row['key_name']] = row['key_id']
 
+        delimiter_missing = detect_csv_delimiter(MISSING_TRANSLATIONS_FILE)
         with MISSING_TRANSLATIONS_FILE.open('r') as infile, MERGED_RESULT_FILE.open('w', newline='') as outfile:
             writer = csv.writer(outfile)
             writer.writerow(['key_name', 'key_id', 'languages'])
-            for row in csv.reader(infile):
+            for row in csv.reader(infile, delimiter=delimiter_missing):
                 key_name = row[0]
                 key_id = keys_dict.get(key_name, '')
                 writer.writerow([key_name, key_id] + row[1:])

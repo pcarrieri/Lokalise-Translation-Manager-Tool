@@ -2,6 +2,7 @@
 
 import csv
 from pathlib import Path
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -31,10 +32,11 @@ def load_translation_id_lookup():
     print_colored(f"-> Loading translation ID lookup from '{ALL_TRANSLATION_IDS_FILE.name}'...", Fore.BLUE)
     if not ALL_TRANSLATION_IDS_FILE.exists():
         raise FileNotFoundError(f"File not found: {ALL_TRANSLATION_IDS_FILE}")
-    
+
     id_lookup = {}
+    delimiter = detect_csv_delimiter(ALL_TRANSLATION_IDS_FILE)
     with ALL_TRANSLATION_IDS_FILE.open('r', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
+        reader = csv.DictReader(csvfile, delimiter=delimiter)
         for row in reader:
             key_id = row['key_id']
             if key_id not in id_lookup:
@@ -58,8 +60,9 @@ def enrich_and_save_translations(id_lookup):
     if not MERGED_TRANSLATIONS_FILE.exists():
          raise FileNotFoundError(f"Normalized file not found: {MERGED_TRANSLATIONS_FILE}")
 
+    delimiter = detect_csv_delimiter(MERGED_TRANSLATIONS_FILE)
     with MERGED_TRANSLATIONS_FILE.open('r', encoding='utf-8') as infile:
-        rows_to_process = list(csv.DictReader(infile))
+        rows_to_process = list(csv.DictReader(infile, delimiter=delimiter))
     
     print_colored(f"   Found {len(rows_to_process)} keys to prepare.", Fore.BLUE)
     print_colored("\n-> Enriching records with translation IDs...", Fore.CYAN)

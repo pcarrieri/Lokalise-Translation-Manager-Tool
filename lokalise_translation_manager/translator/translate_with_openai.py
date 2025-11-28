@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 from openai import OpenAI, APIConnectionError, RateLimitError, APITimeoutError, APIStatusError
 import importlib.util
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -34,7 +37,7 @@ LANGUAGE_NAMES = {
     "en": "English", "de": "German", "fr": "French", "it": "Italian", "pl": "Polish",
     "sv": "Swedish", "nb": "Norwegian (Bokmål)", "da": "Danish", "fi": "Finnish",
     "lt_LT": "Lithuanian", "lv_LV": "Latvian", "et_EE": "Estonian",
-    "tr_TR": "Turkish", "ar": "Arabic"
+    "tr_TR": "Turkish", "ar": "Arabic", "el": "Greek"
 }
 # --------------------------------
 
@@ -97,9 +100,11 @@ def translate_text(client, text, lang_code, prompt_addons=""):
 def load_completed_keys():
     if not OUTPUT_FILE.exists():
         return set()
+
+    delimiter = detect_csv_delimiter(OUTPUT_FILE)
     with OUTPUT_FILE.open('r', encoding='utf-8') as f:
         try:
-            return {row['key_id'] for row in csv.DictReader(f)}
+            return {row['key_id'] for row in csv.DictReader(f, delimiter=delimiter)}
         except (csv.Error, KeyError):
              print_colored(f"WARNING: Could not parse {OUTPUT_FILE.name}. Starting fresh.", Fore.YELLOW)
              return set()
@@ -180,9 +185,10 @@ def run_translation(api_key):
     if not INPUT_FILE.exists():
         print_colored(f"ERROR: Input file not found at {INPUT_FILE}", Fore.RED)
         return
-        
+
+    delimiter = detect_csv_delimiter(INPUT_FILE)
     with INPUT_FILE.open('r', encoding='utf-8') as infile:
-         all_rows = [row for row in csv.DictReader(infile)]
+         all_rows = [row for row in csv.DictReader(infile, delimiter=delimiter)]
 
     if not all_rows:
         print_colored("INFO: Input file is empty. Nothing to translate.", Fore.YELLOW)

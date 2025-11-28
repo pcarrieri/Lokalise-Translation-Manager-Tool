@@ -6,6 +6,7 @@ import json
 import requests
 import time
 from pathlib import Path
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -53,19 +54,12 @@ def update_translations():
             print_colored(f"ERROR: Input file '{TRANSLATION_DONE_FILE.name}' not found. Nothing to upload.", Fore.RED)
             return
 
-        with TRANSLATION_DONE_FILE.open('r', encoding='utf-8') as infile:
-            # --- NUOVO: Rilevamento del delimitatore più robusto basato sull'header ---
-            header = infile.readline().strip()
-            infile.seek(0)  # Torna all'inizio del file
+        # Rilevamento automatico del delimitatore CSV
+        delimiter = detect_csv_delimiter(TRANSLATION_DONE_FILE)
+        print_colored(f"INFO: Using detected CSV delimiter: '{delimiter}'", Fore.YELLOW)
 
-            delimiter = ','  # Imposta la virgola come default
-            if ';' in header:
-                delimiter = ';'  # Se trovi un punto e virgola nell'header, usalo
-            
-            print_colored(f"INFO: Using detected CSV delimiter: '{delimiter}'", Fore.YELLOW)
-            
+        with TRANSLATION_DONE_FILE.open('r', encoding='utf-8') as infile:
             reader = list(csv.DictReader(infile, delimiter=delimiter))
-            # --- Fine della modifica ---
 
         if not reader:
             print_colored(f"INFO: Input file '{TRANSLATION_DONE_FILE.name}' is empty. Nothing to upload.", Fore.YELLOW)

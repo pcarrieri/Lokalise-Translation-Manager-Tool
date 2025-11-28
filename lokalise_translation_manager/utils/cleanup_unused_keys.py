@@ -3,6 +3,7 @@ import csv
 import json
 import requests
 from pathlib import Path
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import init, Fore, Style
@@ -36,8 +37,9 @@ def print_colored(text, color=None):
 def load_keys(file_path):
     keys = set()
     if file_path.exists():
+        delimiter = detect_csv_delimiter(file_path)
         with file_path.open('r', encoding='utf-8') as file:
-            reader = csv.reader(file)
+            reader = csv.reader(file, delimiter=delimiter)
             for row in reader:
                 keys.add(row[0].strip())
     return keys
@@ -64,8 +66,9 @@ def filter_lokalise_keys():
     total_keys = load_keys(TOTAL_KEYS_FILE)
     lokalise_keys = {}
 
+    delimiter = detect_csv_delimiter(LOKALISE_KEYS_FILE)
     with LOKALISE_KEYS_FILE.open('r', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
+        reader = csv.DictReader(file, delimiter=delimiter)
         for row in reader:
             lokalise_keys[row['key_name']] = row['key_id']
 
