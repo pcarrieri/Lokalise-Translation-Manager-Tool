@@ -45,6 +45,11 @@ import webbrowser
 from pathlib import Path
 import importlib.util
 from typing import List, Optional
+from lokalise_translation_manager.utils.plugin_manager import (
+    get_enabled_plugins_by_type,
+    sync_plugin_config,
+    print_plugin_status
+)
 
 # Try to import colorama for colored output
 try:
@@ -147,66 +152,64 @@ def ask_user_yes_no(question: str) -> bool:
 
 def discover_action_plugins() -> List[str]:
     """
-    Discover ACTION-type plugins in the plugins directory.
+    Discover and return enabled ACTION-type plugins.
 
-    This function scans the plugins directory for Python files containing the
-    [ACTION] marker. ACTION plugins run before translation and can bypass the
-    OpenAI translation step by returning True from their run() function.
+    This function uses the plugin configuration manager to find ACTION plugins
+    that are both present in the plugins directory AND enabled in the
+    configuration file (config/plugins_config.json).
+
+    ACTION plugins run before translation and can bypass the OpenAI translation
+    step by returning True from their run() function.
 
     The discovery process:
-    1. Scans all .py files in the plugins directory
-    2. Reads file contents to look for [ACTION] marker
-    3. Skips __init__.py files
-    4. Handles read errors gracefully
+    1. Reads plugin configuration from config/plugins_config.json
+    2. Scans all .py files in the plugins directory for [ACTION] marker
+    3. Returns only plugins that are marked as enabled in configuration
+    4. Respects auto_discover setting for new plugins
 
     Returns:
-        List of plugin filenames (e.g., ['inject_updated_translations.py'])
+        List of enabled plugin filenames (e.g., ['inject_updated_translations.py'])
+
+    Configuration:
+        Plugins can be enabled/disabled in config/plugins_config.json:
+        {
+            "plugins": {
+                "inject_updated_translations.py": {
+                    "enabled": true,
+                    "type": "ACTION"
+                }
+            }
+        }
 
     Example:
         action_plugins = discover_action_plugins()
         if action_plugins:
-            print(f"Found {len(action_plugins)} ACTION plugins")
+            print(f"Found {len(action_plugins)} enabled ACTION plugins")
             # Plugins will be executed in translate_with_openai.py
 
     Note:
-        This is a generic, marker-based discovery system. The function does
-        not know or care about specific plugin implementations or file names.
-        It only checks IF the marker exists, not WHAT the plugin does.
+        - Plugins can be disabled without deleting files
+        - New plugins are auto-enabled if auto_discover setting is true
+        - Configuration is synchronized automatically on first run
 
     See Also:
         - discover_extension_plugins(): For discovering EXTENSION plugins
-        - Plugin architecture documentation in GENERIC_ARCHITECTURE.md
+        - lokalise_translation_manager.utils.plugin_manager: Configuration management
+        - config/plugins_config.json: Plugin configuration file
     """
-    action_plugins = []
-
-    if not PLUGINS_DIR.exists():
-        return action_plugins
-
-    for f in PLUGINS_DIR.glob('*.py'):
-        # Skip __init__.py
-        if f.name == '__init__.py':
-            continue
-
-        try:
-            content = f.read_text(encoding='utf-8')
-            if "[ACTION]" in content:
-                action_plugins.append(f.name)
-        except Exception as e:
-            print_colored(
-                f"Warning: Could not read plugin {f.name}: {e}",
-                Fore.YELLOW
-            )
-
-    return action_plugins
+    return get_enabled_plugins_by_type("ACTION")
 
 
 def discover_extension_plugins() -> List[str]:
     """
-    Discover EXTENSION-type plugins in the plugins directory.
+    Discover and return enabled EXTENSION-type plugins.
 
-    This function scans the plugins directory for Python files containing the
-    [EXTENSION] marker. EXTENSION plugins run after translation (or after
-    ACTION plugin bypass) and process the translated data.
+    This function uses the plugin configuration manager to find EXTENSION plugins
+    that are both present in the plugins directory AND enabled in the
+    configuration file (config/plugins_config.json).
+
+    EXTENSION plugins run after translation (or after ACTION plugin bypass) and
+    process the translated data.
 
     Common uses for EXTENSION plugins:
     - Filtering translations by category (e.g., payment-related keys)
@@ -215,50 +218,43 @@ def discover_extension_plugins() -> List[str]:
     - Post-processing of translation data
 
     The discovery process:
-    1. Scans all .py files in the plugins directory
-    2. Reads file contents to look for [EXTENSION] marker
-    3. Skips __init__.py files
-    4. Handles read errors gracefully
+    1. Reads plugin configuration from config/plugins_config.json
+    2. Scans all .py files in the plugins directory for [EXTENSION] marker
+    3. Returns only plugins that are marked as enabled in configuration
+    4. Respects auto_discover setting for new plugins
 
     Returns:
-        List of plugin filenames (e.g., ['myPayments.py'])
+        List of enabled plugin filenames (e.g., ['myPayments.py'])
+
+    Configuration:
+        Plugins can be enabled/disabled in config/plugins_config.json:
+        {
+            "plugins": {
+                "myPayments.py": {
+                    "enabled": true,
+                    "type": "EXTENSION"
+                }
+            }
+        }
 
     Example:
         extension_plugins = discover_extension_plugins()
         if extension_plugins:
-            print(f"Found {len(extension_plugins)} EXTENSION plugins")
+            print(f"Found {len(extension_plugins)} enabled EXTENSION plugins")
             run_extension_plugins(extension_plugins)
 
     Note:
-        Like discover_action_plugins(), this is generic and marker-based.
-        The function only identifies plugins by their marker, not by their
-        specific implementation or purpose.
+        - Plugins can be disabled without deleting files
+        - New plugins are auto-enabled if auto_discover setting is true
+        - Configuration is synchronized automatically on first run
 
     See Also:
         - run_extension_plugins(): Executes discovered EXTENSION plugins
         - discover_action_plugins(): For discovering ACTION plugins
+        - lokalise_translation_manager.utils.plugin_manager: Configuration management
+        - config/plugins_config.json: Plugin configuration file
     """
-    extension_plugins = []
-
-    if not PLUGINS_DIR.exists():
-        return extension_plugins
-
-    for f in PLUGINS_DIR.glob('*.py'):
-        # Skip __init__.py
-        if f.name == '__init__.py':
-            continue
-
-        try:
-            content = f.read_text(encoding='utf-8')
-            if "[EXTENSION]" in content:
-                extension_plugins.append(f.name)
-        except Exception as e:
-            print_colored(
-                f"Warning: Could not read plugin {f.name}: {e}",
-                Fore.YELLOW
-            )
-
-    return extension_plugins
+    return get_enabled_plugins_by_type("EXTENSION")
 
 
 def run_extension_plugins(plugin_names: List[str]) -> None:
@@ -392,6 +388,27 @@ def run_tool() -> None:
         - CLAUDE.md: Complete workflow documentation
     """
     try:
+        # ===================================================================
+        # PLUGIN SYSTEM: Synchronize and Display Status
+        # ===================================================================
+        print_colored("\n🔌 Synchronizing plugin configuration...", Fore.CYAN)
+        new_plugins, missing_plugins = sync_plugin_config()
+
+        if new_plugins:
+            print_colored(
+                f"  ✅ Auto-discovered {len(new_plugins)} new plugin(s): {', '.join(new_plugins)}",
+                Fore.GREEN
+            )
+
+        if missing_plugins:
+            print_colored(
+                f"  ⚠️  {len(missing_plugins)} plugin(s) in config but not found: {', '.join(missing_plugins)}",
+                Fore.YELLOW
+            )
+
+        # Display plugin status
+        print_plugin_status()
+
         # ===================================================================
         # STEP 0: Download Lokalise Files
         # ===================================================================

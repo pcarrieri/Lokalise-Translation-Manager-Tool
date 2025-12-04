@@ -1,4 +1,55 @@
-# utils/prepare_translations.py - Prepare final file for OpenAI translation engine
+"""
+Translation Preparation Module for Lokalise Translation Manager
+
+This module prepares the final file for the OpenAI translation engine by:
+- Enriching translation data with correct translation IDs
+- Mapping language codes to their respective translation IDs
+- Handling language code discrepancies (e.g., tr_TR → tr lookup)
+- Creating the final input file for the translator
+
+Workflow:
+    1. Load translation ID lookup table (all_translation_ids.csv)
+    2. Read normalized translation data (merged_translations_result.csv)
+    3. For each key and language, find the corresponding translation ID
+    4. Handle special cases (Turkish: tr_TR → tr mapping)
+    5. Write enriched data to ready_to_translations.csv
+
+Translation ID Lookup:
+    The module builds a mapping: {key_id: {language_iso: translation_id}}
+    This allows quick lookup of translation IDs for each key-language pair.
+
+Turkish Language Hotfix:
+    Lokalise stores Turkish translations with code 'tr', but the normalized
+    data uses 'tr_TR'. This module automatically converts tr_TR → tr for
+    lookup purposes while preserving tr_TR in the output.
+
+Input Files:
+    - reports/all_translation_ids.csv: Complete translation ID mappings
+    - ready_to_be_translated/merged_translations_result.csv: Normalized data
+
+Output File:
+    - reports/ready_to_translations.csv: Final file for translation engine
+
+Usage:
+    python3 -m lokalise_translation_manager.utils.prepare_translations
+
+    Or import:
+        from lokalise_translation_manager.utils.prepare_translations import main
+        main()
+
+Example Data Flow:
+    Input (merged_translations_result.csv):
+        key_name,key_id,languages,translation_id,translation
+        ms_test,123,"tr_TR,de",456,"Hello"
+
+    Translation ID Lookup (all_translation_ids.csv):
+        key_id,language_iso,translation_id
+        123,"tr,de","789,790"
+
+    Output (ready_to_translations.csv):
+        key_name,key_id,languages,translation_id,translation
+        ms_test,123,"tr_TR,de","789,790","Hello"
+"""
 
 import csv
 from pathlib import Path
@@ -26,8 +77,16 @@ def print_colored(text, color=None):
 
 def load_translation_id_lookup():
     """
-    Carica tutti gli ID di traduzione in un dizionario di lookup.
-    Struttura: {key_id: {lang_iso: translation_id}}
+    Load all translation IDs into a lookup dictionary.
+
+    Creates a nested dictionary structure: {key_id: {lang_iso: translation_id}}
+    This allows O(1) lookup of translation IDs for any key-language combination.
+
+    Returns:
+        Dict[str, Dict[str, str]]: Nested dictionary mapping key IDs to language-translation ID pairs
+
+    Raises:
+        FileNotFoundError: If all_translation_ids.csv doesn't exist
     """
     print_colored(f"-> Loading translation ID lookup from '{ALL_TRANSLATION_IDS_FILE.name}'...", Fore.BLUE)
     if not ALL_TRANSLATION_IDS_FILE.exists():
@@ -44,8 +103,8 @@ def load_translation_id_lookup():
             
             languages = [lang.strip() for lang in row.get('language_iso', '').split(',') if lang.strip()]
             translation_ids = [tid.strip() for tid in row.get('translation_id', '').split(',') if tid.strip()]
-            
-            # Crea una mappa lingua -> id per questa chiave
+
+            # Create language → ID mapping for this key
             id_lookup[key_id] = dict(zip(languages, translation_ids))
                 
     print_colored(f"   Created lookup table for {len(id_lookup)} keys.", Fore.BLUE)
@@ -53,8 +112,22 @@ def load_translation_id_lookup():
 
 def enrich_and_save_translations(id_lookup):
     """
-    Arricchisce i dati di traduzione con i corretti translation_id,
-    gestendo la discrepanza del codice lingua per il turco.
+    Enrich translation data with correct translation IDs.
+
+    Handles language code discrepancies, particularly for Turkish (tr_TR → tr).
+    For each key and required language, looks up the corresponding translation ID
+    from the lookup table and adds it to the output.
+
+    Args:
+        id_lookup: Dictionary mapping {key_id: {lang_iso: translation_id}}
+
+    Raises:
+        FileNotFoundError: If merged_translations_result.csv doesn't exist
+
+    Note:
+        Turkish Hotfix: When the language is 'tr_TR', the function automatically
+        looks it up as 'tr' in the lookup table, as Lokalise stores Turkish with
+        the short code 'tr' but normalization uses 'tr_TR'.
     """
     print_colored(f"\n-> Reading normalized data from '{MERGED_TRANSLATIONS_FILE.name}'...", Fore.BLUE)
     if not MERGED_TRANSLATIONS_FILE.exists():
@@ -77,20 +150,19 @@ def enrich_and_save_translations(id_lookup):
         final_translation_ids = []
         
         for lang in languages_needed:
-            # --- HOTFIX DEFINITIVO: Corregge il codice lingua PRIMA della ricerca ---
-            # Se la lingua è 'tr_TR', la cerchiamo nella tabella di lookup come 'tr'.
+            # DEFINITIVE HOTFIX: Fix language code BEFORE lookup
+            # If language is 'tr_TR', look it up in the table as 'tr'
             lookup_lang = 'tr' if lang == 'tr_TR' else lang
-            # --------------------------------------------------------------------
 
             if key_id in id_lookup and lookup_lang in id_lookup[key_id]:
                 trans_id = id_lookup[key_id][lookup_lang]
                 final_translation_ids.append(trans_id)
             else:
-                # Questo caso non dovrebbe più accadere per il turco, ma rimane come sicurezza
+                # This case shouldn't happen for Turkish anymore, but kept as safety net
                 print_colored(f"   - WARNING: No translation_id found for key '{key_name}' in language '{lang}'. Appending empty ID.", Fore.YELLOW)
                 final_translation_ids.append('')
-        
-        # Prepara la riga finale per l'output
+
+        # Prepare final output row
         output_rows.append({
             'key_name': key_name,
             'key_id': key_id,

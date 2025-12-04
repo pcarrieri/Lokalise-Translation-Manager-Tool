@@ -1,4 +1,53 @@
-# utils/normalize_translations.py - Normalize and prepare translations for OpenAI
+"""
+Translation Normalization Module for Lokalise Translation Manager
+
+This module normalizes and prepares translation data for OpenAI processing by:
+- Normalizing language codes to Lokalise format
+- Merging translation requests with English source translations
+- Validating data consistency
+- Preparing final CSV for translation engine
+
+Workflow:
+    1. Read merged translation requirements (merged_result.csv)
+    2. Read English source translations (en_translations.csv)
+    3. Match keys requiring translation with their English source
+    4. Normalize language codes (e.g., 'tr' → 'tr_TR', 'lt' → 'lt_LT')
+    5. Filter out keys without English source
+    6. Write normalized output (merged_translations_result.csv)
+
+Language Code Normalization:
+    The module maps Lokalise short codes to full locale identifiers:
+    - Baltic languages: lt → lt_LT, lv → lv_LV, et → et_EE
+    - Turkish: tr → tr_TR
+    - Other languages: Remain unchanged (en, de, fr, it, etc.)
+
+Input Files:
+    - reports/merged_result.csv: Keys needing translation with language lists
+    - reports/en_translations.csv: English source translations from Lokalise
+
+Output File:
+    - ready_to_be_translated/merged_translations_result.csv: Normalized data
+
+Usage:
+    python3 -m lokalise_translation_manager.utils.normalize_translations
+
+    Or import:
+        from lokalise_translation_manager.utils.normalize_translations import process_normalization
+        process_normalization()
+
+Example Data Flow:
+    Input (merged_result.csv):
+        key_name,key_id,languages
+        ms_test,123,"tr,lt,de"
+
+    English Source (en_translations.csv):
+        key_id,translation_id,translation
+        123,456,"Hello"
+
+    Output (merged_translations_result.csv):
+        key_name,key_id,languages,translation_id,translation
+        ms_test,123,"tr_TR,lt_LT,de",456,"Hello"
+"""
 
 import csv
 import time
@@ -21,7 +70,7 @@ MERGED_RESULT_FILE = REPORTS_DIR / "merged_result.csv"
 EN_TRANSLATIONS_FILE = REPORTS_DIR / "en_translations.csv"
 OUTPUT_FILE = READY_DIR / "merged_translations_result.csv"
 
-# --- AGGIUNTO SUPPORTO PER TURCO E ARABO ---
+# Supported language mappings (Lokalise format)
 LOKALISE_LANGUAGES = {
     "en": "en", "de": "de", "fr": "fr", "it": "it", "pl": "pl",
     "sv": "sv", "nb": "nb", "da": "da", "fi": "fi",
@@ -37,12 +86,19 @@ def print_colored(text, color=None):
 
 def normalize_languages(languages, normalization_count):
     """
-    Funzione corretta per dividere e pulire correttamente i codici lingua.
+    Normalize and clean language codes correctly.
+
+    Args:
+        languages: Comma-separated language codes
+        normalization_count: Dictionary to track normalization counts
+
+    Returns:
+        Normalized comma-separated language codes
     """
     normalized = []
-    # --- FIX CRITICO APPLICATO QUI ---
-    # 1. Dividi solo per virgola.
-    # 2. Usa .strip() per rimuovere spazi bianchi invisibili.
+    # CRITICAL FIX APPLIED HERE:
+    # 1. Split only by comma
+    # 2. Use .strip() to remove invisible whitespace
     for lang in languages.split(','):
         clean_lang = lang.strip()
         if clean_lang in LOKALISE_LANGUAGES:
@@ -62,7 +118,7 @@ def process_normalization():
     try:
         READY_DIR.mkdir(parents=True, exist_ok=True)
 
-        # --- LOG DETTAGLIATO: LETTURA FILE ---
+        # DETAILED LOG: FILE READING
         print_colored(f"-> Reading keys needing translation from '{MERGED_RESULT_FILE.name}'...", Fore.BLUE)
         if not MERGED_RESULT_FILE.exists():
             raise FileNotFoundError(f"Input file not found: {MERGED_RESULT_FILE}")
@@ -87,7 +143,7 @@ def process_normalization():
         output_data = []
         for key_id, merged_row in merged_data.items():
             key_name = merged_row.get('key_name', 'N/A')
-            # --- LOG DETTAGLIATO: PROCESSO DI MERGE PER OGNI CHIAVE ---
+            # DETAILED LOG: MERGE PROCESS FOR EACH KEY
             if key_id in en_data:
                 print_colored(f"   [OK] Match for key '{key_name}' ({key_id}) found. Preparing for translation.", Fore.GREEN)
                 
