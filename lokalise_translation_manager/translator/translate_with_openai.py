@@ -128,6 +128,8 @@ import sys
 # Add parent directory to path for relative imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.csv_utils import detect_csv_delimiter
+from utils.language_config import get_language_names
+from utils.plugin_manager import is_plugin_enabled, load_plugin_config
 
 # Optional colorama support for colored console output
 try:
@@ -173,25 +175,10 @@ INITIAL_DELAY_SECONDS = 5
 # OpenAI model to use (recommended model for performance/cost balance)
 OPENAI_MODEL = "gpt-4o-mini"
 
-# Mapping of language codes to full language names for better prompts
+# Language names loaded from centralized config (config/supported_languages.json)
 # This improves translation quality by providing clear language context
-LANGUAGE_NAMES = {
-    "en": "English",
-    "de": "German",
-    "fr": "French",
-    "it": "Italian",
-    "pl": "Polish",
-    "sv": "Swedish",
-    "nb": "Norwegian (Bokmål)",
-    "da": "Danish",
-    "fi": "Finnish",
-    "lt_LT": "Lithuanian",
-    "lv_LV": "Latvian",
-    "et_EE": "Estonian",
-    "tr_TR": "Turkish",
-    "ar": "Arabic",
-    "el": "Greek"
-}
+# To add/remove languages, edit the config file instead of this code
+LANGUAGE_NAMES = get_language_names()
 
 # ==================== UTILITY FUNCTIONS ====================
 
@@ -398,11 +385,14 @@ def load_completed_keys() -> Set[str]:
 
 def discover_plugins() -> Tuple[List[str], List[str], List[str]]:
     """
-    Discover all plugins in the plugins directory by scanning for markers.
+    Discover all enabled plugins in the plugins directory by scanning for markers.
 
     Scans all Python files in the plugins directory and identifies them by
     their marker comments: [PROMPT], [ACTION], or [EXTENSION]. A single plugin
     file can have multiple markers to participate in multiple phases.
+
+    This function also checks config/plugins_config.json to filter out disabled
+    plugins. Only enabled plugins are returned.
 
     This is a marker-based discovery system that maintains complete separation
     between the core translation engine and plugin implementations. The engine
@@ -420,9 +410,9 @@ def discover_plugins() -> Tuple[List[str], List[str], List[str]]:
 
     Returns:
         Tuple[List[str], List[str], List[str]]: Three lists of plugin filenames:
-            - prompt_plugins: List of PROMPT plugin filenames
-            - action_plugins: List of ACTION plugin filenames
-            - extension_plugins: List of EXTENSION plugin filenames
+            - prompt_plugins: List of enabled PROMPT plugin filenames
+            - action_plugins: List of enabled ACTION plugin filenames
+            - extension_plugins: List of enabled EXTENSION plugin filenames
 
     Example:
         prompt_plugins, action_plugins, extension_plugins = discover_plugins()
@@ -446,8 +436,16 @@ def discover_plugins() -> Tuple[List[str], List[str], List[str]]:
     if not PLUGINS_DIR.exists():
         return prompt_plugins, action_plugins, extension_plugins
 
+    # Load plugin configuration to check enabled status
+    plugin_config = load_plugin_config()
+
     for f in PLUGINS_DIR.glob('*.py'):
         if f.name == '__init__.py':
+            continue
+
+        # Check if plugin is enabled in config
+        if not is_plugin_enabled(f.name, plugin_config):
+            print_colored(f"Plugin disabled (skipping): {f.name}", Fore.YELLOW)
             continue
 
         try:
@@ -474,44 +472,72 @@ def load_prompt_plugins(plugin_names: List[str]) -> str:
     """
     Load content from PROMPT plugins to inject into translation prompts.
 
-    PROMPT plugins are text files (or Python files with docstrings) that contain
-    additional instructions to add to the OpenAI system prompt. They allow
-    customizing translation behavior without modifying core code.
+    PROMPT plugins can provide prompt content in two ways:
+    1. Dynamic: Define a get_prompt_addon() function that returns the prompt text
+    2. Static: The entire file content is used as the prompt text (legacy mode)
 
-    All successfully loaded plugin contents are concatenated with spaces and
-    returned as a single string to be appended to the system prompt.
+    The dynamic approach is preferred as it allows plugins to:
+    - Generate prompts based on configuration
+    - Include conditional logic
+    - Load terms from external files
+
+    All successfully loaded plugin contents are concatenated and returned
+    as a single string to be appended to the system prompt.
 
     Args:
         plugin_names: List of PROMPT plugin filenames to load
 
     Returns:
-        str: Concatenated content of all PROMPT plugins, space-separated
+        str: Concatenated content of all PROMPT plugins
              Returns empty string if no plugins or all fail to load
 
-    Example:
+    Example (Dynamic Plugin):
         Plugin file (plugins/brand_names.py):
         '''
         # [PROMPT]
-        6. Never translate the following brand names: MyApp, CompanyName, ProductX
+        TERMS = ["Brand1", "Brand2"]
+
+        def get_prompt_addon() -> str:
+            return f"Never translate: {', '.join(TERMS)}"
         '''
 
-        Usage:
-        addons = load_prompt_plugins(['brand_names.py'])
-        # addons: "6. Never translate the following brand names: MyApp, CompanyName, ProductX"
-
-        # This gets appended to the system prompt, affecting all translations
+    Example (Static Plugin - Legacy):
+        Plugin file (plugins/simple_rules.txt):
+        '''
+        # [PROMPT]
+        6. Never translate brand names.
+        '''
     """
     texts = []
 
     for name in plugin_names:
+        plugin_path = PLUGINS_DIR / name
         try:
-            content = (PLUGINS_DIR / name).read_text(encoding='utf-8')
+            # Try dynamic loading first (import module and call get_prompt_addon)
+            if name.endswith('.py'):
+                module_name = name[:-3]  # Remove .py extension
+                spec = importlib.util.spec_from_file_location(module_name, plugin_path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+
+                    # Check if module has get_prompt_addon function
+                    if hasattr(module, 'get_prompt_addon') and callable(module.get_prompt_addon):
+                        content = module.get_prompt_addon()
+                        if content:
+                            texts.append(content)
+                            print_colored(f"Loaded PROMPT plugin (dynamic): {name}", Fore.YELLOW)
+                        continue
+
+            # Fallback to static content loading (legacy mode)
+            content = plugin_path.read_text(encoding='utf-8')
             texts.append(content)
-            print_colored(f"Loaded PROMPT plugin: {name}", Fore.YELLOW)
+            print_colored(f"Loaded PROMPT plugin (static): {name}", Fore.YELLOW)
+
         except Exception as e:
             print_colored(f"Failed to load PROMPT plugin {name}: {e}", Fore.RED)
 
-    return " ".join(texts)
+    return "\n".join(texts)
 
 
 def run_plugins(plugin_names: List[str], plugin_type: str) -> bool:

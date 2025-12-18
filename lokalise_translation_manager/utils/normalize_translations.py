@@ -54,6 +54,7 @@ import time
 import sys
 from pathlib import Path
 from .csv_utils import detect_csv_delimiter
+from .language_config import get_lokalise_mappings
 
 try:
     from colorama import init, Fore, Style
@@ -70,13 +71,9 @@ MERGED_RESULT_FILE = REPORTS_DIR / "merged_result.csv"
 EN_TRANSLATIONS_FILE = REPORTS_DIR / "en_translations.csv"
 OUTPUT_FILE = READY_DIR / "merged_translations_result.csv"
 
-# Supported language mappings (Lokalise format)
-LOKALISE_LANGUAGES = {
-    "en": "en", "de": "de", "fr": "fr", "it": "it", "pl": "pl",
-    "sv": "sv", "nb": "nb", "da": "da", "fi": "fi",
-    "lt": "lt_LT", "lv": "lv_LV", "et": "et_EE",
-    "tr": "tr_TR", "ar": "ar", "el": "el"
-}
+# Supported language mappings loaded from centralized config (config/supported_languages.json)
+# To add/remove languages, edit the config file instead of this code
+LOKALISE_LANGUAGES = get_lokalise_mappings()
 
 def print_colored(text, color=None):
     if colorama_available and color:
