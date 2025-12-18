@@ -1,11 +1,100 @@
 #!/usr/bin/env python3
 """
-Utility script to activate the inject_updated_translations plugin.
-Renames a reviewed CSV file to payment_terms_translations_UPDATED.csv
+Activate Reviewed Translations Plugin - Interactive File Selector
+
+This utility script activates the inject_updated_translations plugin by copying
+a reviewed CSV file to the special filename that triggers the plugin:
+payment_terms_translations_UPDATED.csv
+
+Purpose:
+    The inject_updated_translations plugin automatically detects and processes
+    files named payment_terms_translations_UPDATED.csv. This script provides
+    an interactive interface to select which reviewed translation file should
+    be activated.
+
+Workflow:
+    1. Check if target file already exists
+    2. Prompt for replacement if needed
+    3. List all available CSV files in reports/
+    4. Display file sizes for reference
+    5. User selects file by number
+    6. Copy selected file to target name
+    7. Validate CSV structure
+    8. Confirm plugin is ready to use
+
+Plugin Integration:
+    - Target filename: payment_terms_translations_UPDATED.csv
+    - Location: reports/
+    - Validation: Uses inject_updated_translations.validate_csv_structure()
+    - Required columns: key_id, key_name, language_iso, translation_id,
+                       new_translation, modified_at
+
+Features:
+    - Interactive file selection with numbering
+    - File size display for easy identification
+    - Automatic CSV structure validation
+    - Colorama support for enhanced output
+    - Graceful error handling
+    - Confirmation messages
+
+Required CSV Structure:
+    key_id,key_name,language_iso,translation_id,new_translation,modified_at
+    123,ms_test,it,456,Ciao,2024-01-15T10:30:00Z
+
+Usage:
+    python3 activate_reviewed_translations.py
+
+    Then follow the interactive prompts:
+    1. Confirm replacement if file exists
+    2. Enter number of file to use
+    3. Or enter 'q' to quit
+
+Example Session:
+    $ python3 activate_reviewed_translations.py
+
+    ======================================================================
+    Activate Reviewed Translations Plugin
+    ======================================================================
+
+    📂 Available CSV files in /reports/:
+
+      1. final_report.csv                           (    45.2 KB)
+      2. translation_done.csv                       (    89.1 KB)
+      3. merged_result.csv                          (    12.3 KB)
+
+    Enter the number of the file to use (or 'q' to quit):
+
+    Your choice: 1
+
+    ✅ Successfully created 'payment_terms_translations_UPDATED.csv'
+       Source: final_report.csv
+
+    📋 Validating CSV structure...
+    ✅ Valid CSV structure with 150 rows
+       Detected delimiter: ','
+
+    🎉 Ready to use! Run the tool with:
+       python3 run.py
+
+Safety Features:
+    - Warns before overwriting existing file
+    - Validates CSV structure before confirming
+    - Deletes invalid files automatically
+    - Shows required columns if validation fails
+
+Exit Codes:
+    0: Success
+    1: Error (invalid choice, validation failed, etc.)
+
+Error Handling:
+    - ValueError: Invalid numeric input
+    - KeyboardInterrupt: User cancellation (Ctrl+C)
+    - Exception: General errors with traceback
 """
 
 import sys
 from pathlib import Path
+from typing import List
 
 try:
     from colorama import Fore, init
@@ -21,20 +110,122 @@ except ImportError:
         BLUE = ''
 
 
-def print_colored(text, color=''):
+def print_colored(text: str, color: str = '') -> None:
+    """
+    Print colored text to console with colorama fallback.
+
+    Args:
+        text: Text to print
+        color: Colorama color code (Fore.RED, Fore.GREEN, etc.)
+
+    Note:
+        If colorama is not available, prints plain text without colors.
+        The Fore class is stubbed with empty strings when colorama is missing.
+    """
     if color_enabled and color:
         print(color + text)
     else:
         print(text)
 
 
-def list_csv_files(reports_dir):
-    """List all CSV files in the reports directory"""
+def list_csv_files(reports_dir: Path) -> List[Path]:
+    """
+    List all CSV files in the reports directory.
+
+    Args:
+        reports_dir: Path to the reports directory
+
+    Returns:
+        List[Path]: Sorted list of CSV file paths
+
+    Note:
+        - Only includes files (not directories)
+        - Filters by .csv extension
+        - Sorted alphabetically by filename
+        - Returns empty list if directory doesn't exist or has no CSV files
+    """
     csv_files = [f for f in reports_dir.glob('*.csv') if f.is_file()]
     return sorted(csv_files, key=lambda x: x.name)
 
 
-def main():
+def main() -> int:
+    """
+    Main function to activate reviewed translations plugin.
+
+    Provides interactive interface for selecting and activating a reviewed
+    translation CSV file. The selected file is copied to the special name
+    that triggers the inject_updated_translations plugin.
+
+    Returns:
+        int: Exit code (0 for success, 1 for error)
+
+    Workflow:
+        1. Display banner
+        2. Check if target file exists
+        3. Prompt for replacement if needed
+        4. List available CSV files with sizes
+        5. Get user selection
+        6. Copy selected file to target name
+        7. Validate CSV structure
+        8. Display confirmation or error
+
+    User Interactions:
+        - "Do you want to replace it? (y/n)": Replace existing file
+        - "Enter the number of the file to use (or 'q' to quit)": File selection
+        - Valid responses: 1-N (file number), 'q' (quit)
+
+    Validation:
+        Uses inject_updated_translations.validate_csv_structure() to verify:
+        - Required columns present
+        - CSV delimiter detection
+        - Row count
+
+    Exit Codes:
+        0: Success - file activated and validated
+        1: Error - invalid choice, validation failed, file not found, etc.
+
+    Error Handling:
+        ValueError: Invalid numeric input → Returns 1
+        KeyboardInterrupt: User cancelled (Ctrl+C) → Returns 0
+        Exception: General error with traceback → Returns 1
+
+    Example Output (Success):
+        ======================================================================
+        Activate Reviewed Translations Plugin
+        ======================================================================
+
+        📂 Available CSV files in /reports/:
+
+          1. final_report.csv                           (    45.2 KB)
+          2. translation_done.csv                       (    89.1 KB)
+
+        Enter the number of the file to use (or 'q' to quit):
+
+        Your choice: 1
+
+        ✅ Successfully created 'payment_terms_translations_UPDATED.csv'
+           Source: final_report.csv
+
+        📋 Validating CSV structure...
+        ✅ Valid CSV structure with 150 rows
+           Detected delimiter: ','
+
+        🎉 Ready to use! Run the tool with:
+           python3 run.py
+
+    Example Output (Error):
+        ❌ Validation failed: Missing required column 'modified_at'
+
+        The file structure is not compatible. Required columns:
+          - key_id
+          - key_name
+          - language_iso
+          - translation_id
+          - new_translation
+          - modified_at
+
+        Deleted invalid file 'payment_terms_translations_UPDATED.csv'
+    """
     BASE_DIR = Path(__file__).resolve().parent
     REPORTS_DIR = BASE_DIR / "reports"
     TARGET_NAME = "payment_terms_translations_UPDATED.csv"
