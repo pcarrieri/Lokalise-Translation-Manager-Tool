@@ -1,48 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
-/* Base tipografica */
+/*
+  Questo file ora definisce solo la base tipografica, senza interferire
+  con i colori o il layout, che sono gestiti da App.css.
+*/
 :root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: inherit;
-  background-color: inherit;
 }
 
-/* Link */
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: none;
-}
-a:hover {
-  color: #535bf2;
-}
-
-/* Layout base */
-html, body, #root {
-  height: 100%;
+/*
+  Rimuoviamo tutte le regole per html, body, #root, a, button etc.
+  perché sono già definite in modo più corretto e specifico in App.css.
+  L'unica regola che manteniamo è un reset del margine del body.
+*/
+body {
   margin: 0;
-  min-width: 320px;
-  background-color: inherit; /* eredita dal tema */
-  color: inherit;             /* eredita dal tema */
-  display: block;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-/* Headings */
-h1 {
-  font-size: 2rem;
-  line-height: 1.2;
-  margin: 0;
-}
-
-/* Pulsanti base - saranno sovrascritti in App.css */
-button {
-  all: unset;
-  cursor: pointer;
 }

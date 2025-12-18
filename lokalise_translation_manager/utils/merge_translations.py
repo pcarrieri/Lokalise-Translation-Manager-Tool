@@ -1,9 +1,66 @@
-# utils/merge_translations.py - Merge iOS and Android missing translations reports
+"""
+Translation Merge Module for Lokalise Translation Manager
+
+This module merges missing translation reports from iOS and Android scanners
+into a single unified list. It consolidates translation requirements from both
+platforms to avoid duplicate translation requests.
+
+Workflow:
+    1. Load missing translations from iOS scanner (missing_ios_translations.csv)
+    2. Load missing translations from Android scanner (missing_android_translations.csv)
+    3. Merge the two lists (union of keys)
+    4. Write unified list to missing_translations.csv
+    5. Display summary statistics
+
+Features:
+    - Automatic CSV delimiter detection for each input file
+    - Deduplication of common keys across platforms
+    - Summary statistics (total, common, platform-specific)
+    - PrettyTable output when available
+
+Input Files:
+    - reports/ios/missing_ios_translations.csv
+    - reports/android/missing_android_translations.csv
+
+Output File:
+    - reports/missing_translations.csv
+
+Usage:
+    python3 -m lokalise_translation_manager.utils.merge_translations
+
+    Or import:
+        from lokalise_translation_manager.utils.merge_translations import run_merge
+        run_merge()
+
+Example Data Flow:
+    iOS Report:
+        key_name,languages
+        ms_test_1,"it, de, fr"
+        ms_common,"el, tr"
+
+    Android Report:
+        key_name,languages
+        ms_test_2,"pl, sv"
+        ms_common,"el, tr"
+
+    Merged Output:
+        key_name,languages
+        ms_test_1,"it, de, fr"
+        ms_test_2,"pl, sv"
+        ms_common,"el, tr"
+
+    Summary:
+        Total iOS keys: 2
+        Total Android keys: 2
+        Merged keys: 3
+        Common keys: 1
+"""
 
 import os
 import csv
 from pathlib import Path
 from collections import defaultdict
+from .csv_utils import detect_csv_delimiter
 
 try:
     from colorama import Fore, init
@@ -29,11 +86,26 @@ def print_colored(text, color):
     print(color + text if color_enabled else text)
 
 def load_missing_translations(file_path):
+    """
+    Load missing translations from a CSV file.
+
+    Args:
+        file_path: Path to the CSV file
+
+    Returns:
+        dict: Dictionary mapping key names to lists of missing languages
+
+    Note:
+        Uses automatic CSV delimiter detection to handle both comma and
+        semicolon delimited files correctly.
+    """
     translations = defaultdict(list)
     if file_path.exists():
         try:
+            # Detect CSV delimiter automatically
+            delimiter = detect_csv_delimiter(file_path)
             with file_path.open('r', encoding='utf-8') as csv_file:
-                reader = csv.reader(csv_file)
+                reader = csv.reader(csv_file, delimiter=delimiter)
                 for row in reader:
                     key = row[0]
                     languages = row[1].split(', ') if len(row) > 1 else []
@@ -43,6 +115,19 @@ def load_missing_translations(file_path):
     return translations
 
 def merge_translations(ios_translations, android_translations):
+    """
+    Merge iOS and Android translation dictionaries.
+
+    Performs a union merge: keys from both platforms are included,
+    but duplicates (common keys) are only included once.
+
+    Args:
+        ios_translations: Dictionary from iOS scanner
+        android_translations: Dictionary from Android scanner
+
+    Returns:
+        dict: Merged dictionary containing all unique keys
+    """
     merged = dict(ios_translations)
     for key, langs in android_translations.items():
         if key not in merged:
@@ -50,6 +135,17 @@ def merge_translations(ios_translations, android_translations):
     return merged
 
 def write_final_csv(translations):
+    """
+    Write merged translations to the final CSV file.
+
+    Args:
+        translations: Dictionary of merged translations
+
+    Output Format:
+        key_name,languages
+        ms_test_1,"it, de, fr"
+        ms_test_2,"pl, sv"
+    """
     try:
         with FINAL_CSV.open('w', newline='', encoding='utf-8') as csv_file:
             writer = csv.writer(csv_file)
@@ -60,6 +156,20 @@ def write_final_csv(translations):
         print_colored(f"Error writing to final CSV: {e}", Fore.RED)
 
 def print_summary(ios, android, merged):
+    """
+    Print summary statistics of the merge operation.
+
+    Args:
+        ios: iOS translations dictionary
+        android: Android translations dictionary
+        merged: Merged translations dictionary
+
+    Displays:
+        - Total iOS keys
+        - Total Android keys
+        - Merged keys (unique)
+        - Common keys (overlap)
+    """
     total_ios = len(ios)
     total_android = len(android)
     total_merged = len(merged)
@@ -81,6 +191,12 @@ def print_summary(ios, android, merged):
                       f"Common keys: {common}", Fore.CYAN)
 
 def run_merge():
+    """
+    Main function to execute the merge process.
+
+    Loads both iOS and Android translation reports, merges them,
+    writes the output, and displays summary statistics.
+    """
     if not color_enabled:
         print("Colorama not installed. Running without colored output.")
 

@@ -1,18 +1,54 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+
+# Logs and generated data
 *.log
 *.csv
-*.json
-/tmp/*.pid
-init_generator.py
-.DS_Store
-venv/
-reports/
-node_modules/
+
+# Config files (user-specific, not package.json)
+config/*.json
 config/*.ini
+
+# Temp/PID files
+/tmp/*.pid
+*.pid
+
+# OS files
+.DS_Store
+
+# Virtual environments
+venv/
+
+# Generated reports
+reports/
+
+# Node modules
+node_modules/
+
+# Root package.json (vestige, real frontend is in webapp/frontend/)
+/package.json
+/package-lock.json
+
+# Development tools (not for distribution)
+init_generator.py
 make_release.sh
-LokaliseTool.bat
-LokaliseTool.command
-lokalise_translation_manager/lokalise_files
-lokalise_translation_manager/plugins
+
+# Markdown files (except README and documentation)
+*.md
+!README.md
+!README.rst
+!examples/README.md
+!tests/TEST_FRAMEWORK_README.md
+!webapp/frontend/README.md
+
+# Local utility scripts
+activate_reviewed_translations.py
+
+# Lokalise downloaded files (project-specific data)
+lokalise_translation_manager/lokalise_files/
+
+# Plugins directory (user customizations)
+lokalise_translation_manager/plugins/
+!lokalise_translation_manager/plugins/__init__.py
